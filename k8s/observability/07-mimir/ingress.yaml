@@ -4,6 +4,8 @@ metadata:
   name: mimir
   namespace: observability
   annotations:
+    cert-manager.io/cluster-issuer: homelab-ca-issuer
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/rewrite-target: /$2
     nginx.ingress.kubernetes.io/proxy-body-size: "32m"
@@ -13,7 +15,8 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - http:
+    - host: homelab.local
+      http:
         paths:
           - path: /mimir(/|$)(.*)
             pathType: ImplementationSpecific
@@ -22,3 +25,7 @@ spec:
                 name: mimir-gateway
                 port:
                   number: 80
+  tls:
+    - hosts:
+        - homelab.local
+      secretName: homelab-tls

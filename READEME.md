@@ -30,12 +30,14 @@ LXD コンテナ上に HA 構成の Kubernetes クラスターを構築し、obs
 
 ### アクセス先
 
+ドメイン `homelab.local` を `10.10.0.100` に解決するよう端末の hosts ファイルに追記すること。
+
 | サービス | URL |
 |---|---|
-| Grafana | http://10.10.0.100/grafana/ (admin / admin) |
-| MinIO コンソール | http://10.10.0.100/minio-console/ (minio / minio12345) |
-| Hubble UI | http://10.10.0.100/hubble/ |
-| Headlamp | http://10.10.0.100/headlamp/ |
+| Grafana | https://homelab.local/grafana/ (admin / admin) |
+| MinIO コンソール | https://homelab.local/minio-console/ (minio / minio12345) |
+| Hubble UI | https://homelab.local/hubble/ |
+| Headlamp | https://homelab.local/headlamp/ |
 
 ---
 
@@ -102,6 +104,9 @@ apt install -y iptables iptables-persistent
 iptables -t nat -A PREROUTING -i enp1s0 -p tcp --dport 80 -j DNAT --to-destination 10.10.0.100:80
 iptables -A FORWARD -p tcp -d 10.10.0.100 --dport 80 -j ACCEPT
 
+iptables -t nat -A PREROUTING -i enp1s0 -p tcp --dport 443 -j DNAT --to-destination 10.10.0.100:443
+iptables -A FORWARD -p tcp -d 10.10.0.100 --dport 443 -j ACCEPT
+
 netfilter-persistent save
 ```
 
@@ -114,6 +119,30 @@ netfilter-persistent save
 ```bash
 kubectl apply -f k8s/namespaces/
 ```
+
+### cert-manager
+
+```bash
+helm repo add jetstack https://charts.jetstack.io
+helm repo update
+helm upgrade --install cert-manager jetstack/cert-manager \
+  -n cert-manager --create-namespace \
+  -f k8s/infra/cert-manager/values.yaml \
+  --wait
+
+# 自己署名 CA ClusterIssuer を作成
+kubectl apply -f k8s/infra/cert-manager/cluster-issuer.yaml
+kubectl wait certificate/homelab-ca -n cert-manager --for=condition=Ready --timeout=60s
+```
+
+CA 証明書をエクスポートしてアクセス端末にインポートする（初回のみ）：
+
+```bash
+kubectl get secret homelab-ca-secret -n cert-manager \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > homelab-ca.crt
+```
+
+Windows: `certmgr.msc` →「信頼されたルート証明機関」にインポート
 
 ### MetalLB
 
@@ -313,4 +342,56 @@ kubectl apply -f k8s/observability/05-grafana/datasource-loki.yaml
 kubectl apply -f k8s/observability/05-grafana/datasource-mimir.yaml
 kubectl apply -f k8s/observability/05-grafana/datasource-tempo.yaml
 kubectl apply -f k8s/observability/05-grafana/dashboards/
+```
+
+
+## 各コンポーネントの管理画面パス
+
+Ingressは未設定のため、kubectl port-forwardを実行してアクセスする。
+
+### Mimir
+Ingressは未設定のため、kubectl port-forwardを実行してアクセスする。
+```bash
+kubectl port-forward -n observability svc/mimir-querier 8080:8080 
+```
+
+### Loki
+Ingressは未設定のため、kubectl port-forwardを実行してアクセスする。
+```bash
+ kubectl port-forward -n observability svc/loki-read 3100:3100 
+```
+
+ルートパス (`/`) は404になるため、以下の具体的なパスにアクセスする。
+
+| パス                          | 内容                       |
+|-------------------------------|----------------------------|
+| `/ready`                      | 準備完了チェック           |
+| `/metrics`                    | Prometheusメトリクス       |
+| `/config`                     | 現在の設定                 |
+| `/services`                   | 実行中サービス一覧         |
+| `/log_level`                  | ログレベル確認・変更       |
+| `/loki/api/v1/status/buildinfo` | バージョン・ビルド情報   |
+
+### Tempo
+Ingressは未設定のため、kubectl port-forwardを実行してアクセスする。
+```bash
+kubectl port-forward -n observability svc/tempo-query-frontend 3200:3200
+```
+
+ルートパス (`/`) は404になるため、以下の具体的なパスにアクセスする。
+
+| パス                          | 内容                                    |
+|-------------------------------|-----------------------------------------|
+| `/ready`                      | 準備完了チェック                        |
+| `/metrics`                    | Prometheusメトリクス                    |
+| `/status`                     | 全ステータス情報                        |
+| `/status/version`             | バージョン情報                          |
+| `/status/services`            | サービス一覧と状態                      |
+| `/status/config`              | 現在の設定（`?mode=diff` で差分表示）   |
+| `/status/endpoints`           | APIエンドポイント一覧                   |
+
+### Alloy
+Ingressは未設定のため、kubectl port-forwardを実行してアクセスする。
+```bash
+kubectl port-forward -n observability svc/alloy 12345:12345
 ```

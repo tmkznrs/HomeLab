@@ -4,14 +4,16 @@ metadata:
   name: headlamp
   namespace: operations
   annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    cert-manager.io/cluster-issuer: homelab-ca-issuer
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "2147483647"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "2147483647"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "2147483647"
 spec:
   ingressClassName: nginx
   rules:
-    - http:
+    - host: homelab.local
+      http:
         paths:
           - path: /headlamp
             pathType: Prefix
@@ -20,3 +22,7 @@ spec:
                 name: headlamp
                 port:
                   number: 80
+  tls:
+    - hosts:
+        - homelab.local
+      secretName: homelab-tls

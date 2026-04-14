@@ -4,14 +4,16 @@ metadata:
   name: grafana
   namespace: observability
   annotations:
+    cert-manager.io/cluster-issuer: homelab-ca-issuer
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
 spec:
   ingressClassName: nginx
   rules:
-    - http:
+    - host: homelab.local
+      http:
         paths:
-          # ── Grafana: UI ───────────────────────────────────────────────────
           - path: /grafana
             pathType: Prefix
             backend:
@@ -19,3 +21,7 @@ spec:
                 name: grafana-service
                 port:
                   number: 3000
+  tls:
+    - hosts:
+        - homelab.local
+      secretName: homelab-tls

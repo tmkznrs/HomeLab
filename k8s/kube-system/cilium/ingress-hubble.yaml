@@ -4,17 +4,20 @@ metadata:
   name: hubble-ui
   namespace: kube-system
   annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    cert-manager.io/cluster-issuer: homelab-ca-issuer
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/rewrite-target: /$2
     nginx.ingress.kubernetes.io/configuration-snippet: |
       proxy_set_header Accept-Encoding "";
-      sub_filter '<base href="/"' '<base href="/hubble/"';
-      sub_filter_once on;
+      sub_filter 'href="/' 'href="/hubble/';
+      sub_filter 'src="/' 'src="/hubble/';
+      sub_filter_once off;
 spec:
   ingressClassName: nginx
   rules:
-    - http:
+    - host: homelab.local
+      http:
         paths:
           - path: /hubble(/|$)(.*)
             pathType: ImplementationSpecific
@@ -23,3 +26,7 @@ spec:
                 name: hubble-ui
                 port:
                   number: 80
+  tls:
+    - hosts:
+        - homelab.local
+      secretName: homelab-tls

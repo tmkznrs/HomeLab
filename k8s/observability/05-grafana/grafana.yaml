@@ -21,7 +21,7 @@ spec:
                   memory: 256Mi
   config:
     server:
-      root_url: "http://grafana-local/grafana/"
+      root_url: "https://homelab.local/grafana/"
       domain: ""
       serve_from_sub_path: "true"
     database:
