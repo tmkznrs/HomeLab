@@ -28,6 +28,7 @@ mimir:
         replication_factor: 2
     limits:
       compactor_blocks_retention_period: 168h
+      out_of_order_time_window: 10m
 
 distributor:
   replicas: 2
