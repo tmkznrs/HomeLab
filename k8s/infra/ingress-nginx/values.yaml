@@ -1,0 +1,6 @@
+controller:
+  service:
+    type: LoadBalancer
+  allowSnippetAnnotations: true
+  config:
+    annotations-risk-level: Critical

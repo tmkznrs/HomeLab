@@ -1,0 +1,5 @@
+config:
+  baseURL: /headlamp
+service:
+  type: ClusterIP
+  port: 80

@@ -1,0 +1,170 @@
+mimir:
+  structuredConfig:
+    common:
+      storage:
+        backend: s3
+        s3:
+          endpoint: minio.infra.svc
+          access_key_id: minio
+          secret_access_key: minio12345
+          insecure: true
+    blocks_storage:
+      s3:
+        bucket_name: mimir-blocks
+    ruler_storage:
+      s3:
+        bucket_name: mimir-ruler
+    alertmanager_storage:
+      s3:
+        bucket_name: mimir-alertmanager
+    ruler:
+      evaluation_interval: 1m
+      poll_interval: 2m
+    ingest_storage:
+      enabled: false
+    ingester:
+      push_grpc_method_enabled: true
+      ring:
+        replication_factor: 2
+    limits:
+      compactor_blocks_retention_period: 168h
+
+distributor:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: mimir
+              app.kubernetes.io/component: distributor
+          topologyKey: kubernetes.io/hostname
+
+ingester:
+  replicas: 2
+  persistentVolume:
+    storageClass: local-path
+  zoneAwareReplication:
+    enabled: false
+    migration:
+      replicas: 0
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: mimir
+              app.kubernetes.io/component: ingester
+          topologyKey: kubernetes.io/hostname
+
+querier:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: mimir
+              app.kubernetes.io/component: querier
+          topologyKey: kubernetes.io/hostname
+
+query_frontend:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: mimir
+              app.kubernetes.io/component: query-frontend
+          topologyKey: kubernetes.io/hostname
+
+store_gateway:
+  replicas: 2
+  persistentVolume:
+    storageClass: local-path
+  zoneAwareReplication:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: mimir
+              app.kubernetes.io/component: store-gateway
+          topologyKey: kubernetes.io/hostname
+
+compactor:
+  replicas: 1
+  persistentVolume:
+    storageClass: local-path
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+
+alertmanager:
+  enabled: false
+
+ruler:
+  enabled: true
+  replicas: 2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: mimir
+              app.kubernetes.io/component: ruler
+          topologyKey: kubernetes.io/hostname
+
+kafka:
+  enabled: false
+
+minio:
+  enabled: false

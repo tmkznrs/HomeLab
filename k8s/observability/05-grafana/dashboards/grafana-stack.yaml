@@ -1,0 +1,41 @@
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: mimir-overview
+  namespace: observability
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: grafana
+  url: "https://grafana.com/api/dashboards/17547/revisions/latest/download"
+  datasources:
+    - inputName: "DS_PROMETHEUS"
+      datasourceName: "Mimir"
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: loki-chunks
+  namespace: observability
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: grafana
+  url: "https://grafana.com/api/dashboards/14055/revisions/latest/download"
+  datasources:
+    - inputName: "DS_LOKI"
+      datasourceName: "Loki"
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: grafana-alloy
+  namespace: observability
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: grafana
+  url: "https://grafana.com/api/dashboards/20494/revisions/latest/download"
+  datasources:
+    - inputName: "DS_PROMETHEUS"
+      datasourceName: "Mimir"

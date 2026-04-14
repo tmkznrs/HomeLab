@@ -1,0 +1,48 @@
+tenant:
+  name: minio-observability
+
+  configSecret:
+    name: minio-env-config
+    accessKey: minio
+    secretKey: minio12345
+
+  pools:
+    - name: pool-0
+      servers: 3
+      volumesPerServer: 2
+      size: 50Gi
+      storageClassName: local-path
+      resources:
+        requests:
+          memory: 256Mi
+          cpu: 100m
+        limits:
+          memory: 512Mi
+          cpu: 500m
+      env:
+        - name: GOMEMLIMIT
+          value: "450MiB"
+        - name: GOGC
+          value: "20"
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: v1.min.io/tenant
+                    operator: In
+                    values:
+                      - minio-observability
+              topologyKey: kubernetes.io/hostname
+
+  buckets:
+    - name: loki-chunks
+    - name: loki-ruler
+    - name: loki-admin
+    - name: mimir-blocks
+    - name: mimir-ruler
+    - name: mimir-alertmanager
+    - name: tempo-traces
+
+  certificate:
+    requestAutoCert: false

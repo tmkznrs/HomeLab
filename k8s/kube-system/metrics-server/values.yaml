@@ -1,0 +1,9 @@
+args:
+  - --kubelet-insecure-tls   # LXDコンテナのkubelet証明書にIP SANがないため必要
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi
+  limits:
+    memory: 64Mi

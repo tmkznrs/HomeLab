@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# lib/node-config.sh — ノード定義の単一ソース
+# このファイルを source して各スクリプトから参照する
+
+# ノードの役割 (cp=コントロールプレーン, wk=ワーカー)
+declare -A NODE_ROLE=(
+  [k8s-cp-1]=cp [k8s-cp-2]=cp [k8s-cp-3]=cp
+  [k8s-wk-1]=wk [k8s-wk-2]=wk [k8s-wk-3]=wk
+)
+
+# 静的IPアドレス
+declare -A NODE_IP=(
+  [k8s-cp-1]=10.10.0.11 [k8s-cp-2]=10.10.0.12 [k8s-cp-3]=10.10.0.13
+  [k8s-wk-1]=10.10.0.21 [k8s-wk-2]=10.10.0.22 [k8s-wk-3]=10.10.0.23
+)
+
+# メモリ制限
+declare -A NODE_MEM=(
+  [k8s-cp-1]=4GiB [k8s-cp-2]=4GiB [k8s-cp-3]=4GiB
+  [k8s-wk-1]=16GiB [k8s-wk-2]=16GiB [k8s-wk-3]=16GiB
+)
+
+# ディスクサイズ
+declare -A NODE_DISK=(
+  [k8s-cp-1]=50GiB [k8s-cp-2]=50GiB [k8s-cp-3]=50GiB
+  [k8s-wk-1]=250GiB [k8s-wk-2]=250GiB [k8s-wk-3]=250GiB
+)
+
+# vCPU数（全ノード共通）
+VCPU=2
+
+# 起動順序（コントロールプレーン → ワーカー）
+NODE_ORDER=(k8s-cp-1 k8s-cp-2 k8s-cp-3 k8s-wk-1 k8s-wk-2 k8s-wk-3)
+
+# LXD設定
+IMAGE="ubuntu:24.04"
+PROFILE="k8s"
+
+# ネットワーク設定
+BRIDGE="lxdbr0"
+BRIDGE_SUBNET="10.10.0.0/24"
+BRIDGE_GW="10.10.0.1"

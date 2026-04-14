@@ -1,0 +1,37 @@
+apiVersion: grafana.integreatly.org/v1beta1
+kind: Grafana
+metadata:
+  name: grafana
+  namespace: observability
+  labels:
+    dashboards: grafana
+spec:
+  deployment:
+    spec:
+      replicas: 1
+      template:
+        spec:
+          containers:
+            - name: grafana
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  memory: 256Mi
+  config:
+    server:
+      root_url: "http://grafana-local/grafana/"
+      domain: ""
+      serve_from_sub_path: "true"
+    database:
+      type: postgres
+      host: postgres-cluster-rw.observability.svc:5432
+      name: grafana
+      user: grafana
+      password: grafana123
+    security:
+      admin_user: admin
+      admin_password: admin
+    log:
+      mode: console

@@ -1,0 +1,123 @@
+deploymentMode: SimpleScalable
+
+loki:
+  auth_enabled: false
+  structuredConfig:
+    ingester:
+      lifecycler:
+        ring:
+          replication_factor: 2
+    compactor:
+      retention_enabled: true
+      delete_request_store: s3
+    limits_config:
+      retention_period: 168h
+      query_timeout: 20s
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: s3
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+  storage:
+    type: s3
+    bucketNames:
+      chunks: loki-chunks
+      ruler: loki-ruler
+      admin: loki-admin
+    s3:
+      endpoint: minio.infra.svc
+      accessKeyId: minio
+      secretAccessKey: minio12345
+      s3ForcePathStyle: true
+      insecure: true
+
+write:
+  replicas: 2
+  persistence:
+    storageClass: local-path
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: write
+          topologyKey: kubernetes.io/hostname
+
+read:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: read
+          topologyKey: kubernetes.io/hostname
+
+backend:
+  replicas: 2
+  persistence:
+    storageClass: local-path
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: backend
+          topologyKey: kubernetes.io/hostname
+
+singleBinary:
+  replicas: 0
+
+chunksCache:
+  enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+  allocatedMemory: 256
+
+resultsCache:
+  enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+  allocatedMemory: 128
+
+lokiCanary:
+  enabled: false
+
+monitoring:
+  selfMonitoring:
+    enabled: false
+    grafanaAgent:
+      installOperator: false
+
+test:
+  enabled: false

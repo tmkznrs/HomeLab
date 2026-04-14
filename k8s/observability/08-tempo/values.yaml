@@ -1,0 +1,76 @@
+tempo:
+  reportingEnabled: false
+  structuredConfig:
+    compactor:
+      compaction:
+        block_retention: 168h
+
+storage:
+  trace:
+    backend: s3
+    s3:
+      bucket: tempo-traces
+      endpoint: minio.infra.svc
+      access_key: minio
+      secret_key: minio12345
+      insecure: true
+
+ingester:
+  replicas: 2
+  config:
+    replication_factor: 2
+  persistentVolume:
+    storageClass: local-path
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+
+distributor:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+compactor:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+querier:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+queryFrontend:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+memcached:
+  enabled: false
+
+minio:
+  enabled: false

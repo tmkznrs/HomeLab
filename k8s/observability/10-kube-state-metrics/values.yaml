@@ -1,0 +1,6 @@
+# Alloy 側で scrape を管理するため pod annotation による自動 scrape を無効化
+prometheusScrape: false
+
+# ダッシュボード（Kubernetes Views 等）が必要とする kube_*_labels メトリクスを有効化
+extraArgs:
+  - --metric-labels-allowlist=namespaces=[*],pods=[*],nodes=[*],deployments=[*],daemonsets=[*],statefulsets=[*],jobs=[*],services=[*]
