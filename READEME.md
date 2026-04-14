@@ -199,6 +199,13 @@ kubectl apply -f k8s/operations/headlamp/token.yaml
 kubectl apply -f k8s/operations/headlamp/ingress.yaml
 ```
 
+Headlamp へのログイン時にトークンが必要になる。以下のコマンドで取得する：
+
+```bash
+kubectl get secret headlamp-token -n operations \
+  -o jsonpath='{.data.token}' | base64 -d
+```
+
 ---
 
 ## ストレージ
