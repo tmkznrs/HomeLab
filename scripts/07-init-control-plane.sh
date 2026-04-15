@@ -57,11 +57,23 @@ echo ""
 # --- Step 3: kubeadm init ---
 echo "[3/6] kubeadm init を実行中（数分かかります）..."
 
+# kubeadm コンフィグを生成してノードに転送
+cat <<EOF | lxc exec "$FIRST_CP" -- tee /tmp/kubeadm-config.yaml > /dev/null
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+kubernetesVersion: "${K8S_VERSION}"
+controlPlaneEndpoint: "${VIP}:6443"
+networking:
+  podSubnet: "${POD_CIDR}"
+  serviceSubnet: "${SERVICE_CIDR}"
+apiServer:
+  extraArgs:
+    max-requests-inflight: "150"
+    max-mutating-requests-inflight: "50"
+EOF
+
 lxc exec "$FIRST_CP" -- kubeadm init \
-  --control-plane-endpoint "${VIP}:6443" \
-  --pod-network-cidr "$POD_CIDR" \
-  --service-cidr "$SERVICE_CIDR" \
-  --kubernetes-version "$K8S_VERSION" \
+  --config /tmp/kubeadm-config.yaml \
   --upload-certs \
   --skip-phases=addon/kube-proxy \
   --ignore-preflight-errors=SystemVerification \
