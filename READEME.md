@@ -225,15 +225,15 @@ helm repo add minio-operator https://operator.min.io/
 helm repo update
 
 helm upgrade --install minio-operator minio-operator/operator \
-  -n infra \
-  -f k8s/infra/minio/operator-values.yaml
+  -n storage --create-namespace \
+  -f k8s/storage/minio/operator-values.yaml
 
 helm upgrade --install minio-tenant minio-operator/tenant \
-  -n infra \
-  -f k8s/infra/minio/tenant-values.yaml
+  -n storage \
+  -f k8s/storage/minio/tenant-values.yaml
 ```
 
-Tenant 仕様: 3 servers × 2 volumes × 50 GiB、サービス名 `minio.infra.svc`
+Tenant 仕様: 3 servers × 2 volumes × 50 GiB、サービス名 `minio.storage.svc`
 
 ### MinIO コンソール Ingress
 
@@ -244,7 +244,7 @@ helm upgrade ingress-nginx ingress-nginx/ingress-nginx \
   -n infra \
   -f k8s/infra/ingress-nginx/values.yaml
 
-kubectl apply -f k8s/infra/minio/ingress.yaml
+kubectl apply -f k8s/storage/minio/ingress.yaml
 ```
 
 ---

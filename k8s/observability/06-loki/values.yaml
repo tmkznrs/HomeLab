@@ -29,7 +29,7 @@ loki:
       ruler: loki-ruler
       admin: loki-admin
     s3:
-      endpoint: minio.infra.svc
+      endpoint: minio.storage.svc
       accessKeyId: minio
       secretAccessKey: minio12345
       s3ForcePathStyle: true

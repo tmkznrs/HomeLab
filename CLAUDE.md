@@ -58,7 +58,7 @@ LAN → host iptables DNAT → 10.10.0.100 (MetalLB) → ingress-nginx → Servi
 
 ### Storage layers
 - **`local-path`** (StorageClass): used for stateful PVCs (Loki write/backend, Mimir ingester/store-gateway/compactor, Tempo ingester). Not the default StorageClass — must be specified explicitly.
-- **MinIO** (`minio-operator` + tenant `minio-observability`): S3-compatible object store for long-term data. Internal endpoint: `minio.infra.svc`. Buckets: `loki-chunks`, `loki-ruler`, `loki-admin`, `mimir-blocks`, `mimir-ruler`, `mimir-alertmanager`, `tempo-traces`. Credentials: `minio` / `minio12345`.
+- **MinIO** (`minio-operator` + tenant `minio-observability`): S3-compatible object store for long-term data. Internal endpoint: `minio.storage.svc`. Buckets: `loki-chunks`, `loki-ruler`, `loki-admin`, `mimir-blocks`, `mimir-ruler`, `mimir-alertmanager`, `tempo-traces`. Credentials: `minio` / `minio12345`.
 
 ### Observability stack data flow
 ```

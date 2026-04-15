@@ -10,7 +10,7 @@ storage:
     backend: s3
     s3:
       bucket: tempo-traces
-      endpoint: minio.infra.svc
+      endpoint: minio.storage.svc
       access_key: minio
       secret_key: minio12345
       insecure: true
