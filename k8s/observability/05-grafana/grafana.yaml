@@ -26,7 +26,7 @@ spec:
       serve_from_sub_path: "true"
     database:
       type: postgres
-      host: postgres-cluster-rw.observability.svc:5432
+      host: postgres-cluster-rw.database.svc:5432
       name: grafana
       user: grafana
       password: grafana123

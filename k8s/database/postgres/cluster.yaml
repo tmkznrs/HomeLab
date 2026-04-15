@@ -2,7 +2,7 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
   name: postgres-cluster
-  namespace: observability
+  namespace: database
 spec:
   instances: 3
   resources:

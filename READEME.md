@@ -267,14 +267,14 @@ Grafana のバックエンド DB。
 
 ```bash
 helm upgrade --install cnpg cnpg/cloudnative-pg \
-  -n observability \
-  -f k8s/observability/03-postgres/cnpg-operator-values.yaml \
+  -n database --create-namespace \
+  -f k8s/database/postgres/cnpg-operator-values.yaml \
   --wait --timeout=120s
 
-kubectl apply -f k8s/observability/03-postgres/secret.yaml
-kubectl apply -f k8s/observability/03-postgres/cluster.yaml
+kubectl apply -f k8s/database/postgres/secret.yaml
+kubectl apply -f k8s/database/postgres/cluster.yaml
 
-kubectl wait cluster/postgres-cluster -n observability \
+kubectl wait cluster/postgres-cluster -n database \
   --for=condition=Ready --timeout=300s
 ```
 
