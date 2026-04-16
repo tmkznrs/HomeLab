@@ -1,10 +1,5 @@
 config:
   baseURL: /headlamp
-  oidc:
-    clientID: "PLACEHOLDER"
-    clientSecret: "PLACEHOLDER"
-    issuerURL: "https://homelab.local/authentik/application/o/headlamp/"
-    scopes: "openid,profile,email"
 service:
   type: ClusterIP
   port: 80
