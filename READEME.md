@@ -213,7 +213,7 @@ kubectl get secret headlamp-token -n operations \
 ### local-path-provisioner
 
 ```bash
-kubectl apply -f k8s/local-path-storage/local-path-provisioner/local-path-storage.yaml
+kubectl apply -f k8s/storage/local-path-provisioner/local-path-storage.yaml
 ```
 
 `StorageClass` 名: `local-path` / デフォルトではない（PVC で明示指定が必要）。
