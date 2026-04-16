@@ -232,7 +232,9 @@ kubectl apply -f k8s/infra/authentik/ingress.yaml
 1. `https://homelab.local/authentik/if/flow/initial-setup/` にアクセスして管理者パスワードを設定
 2. Admin → Applications → Providers → OAuth2/OIDC Provider を作成
    - Name: `grafana` / Redirect URIs: `https://homelab.local/grafana/login/generic_oauth`
-3. Admin → Applications → Application を作成（Slug: `grafana`、上記 Provider を紐付け）
+3. Admin → Applications → Application を作成
+   - Slug: `grafana`、上記 Provider を紐付け
+   - Launch URL: `https://homelab.local/grafana/`
 4. クライアント ID・シークレットを `k8s/infra/authentik/grafana-oauth-secret.yaml` に記入して apply
 
 ```bash
