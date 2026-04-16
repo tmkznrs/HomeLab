@@ -188,6 +188,8 @@ helm install metrics-server metrics-server/metrics-server \
 
 ### Headlamp
 
+Authentik OIDC 認証を使用する。事前に Authentik のセットアップ（後述）を完了すること。
+
 ```bash
 helm repo add headlamp https://kubernetes-sigs.github.io/headlamp/
 helm repo update
@@ -195,18 +197,65 @@ helm install headlamp headlamp/headlamp \
   -n operations \
   -f k8s/operations/headlamp/values.yaml
 
-kubectl apply -f k8s/operations/headlamp/token.yaml
 kubectl apply -f k8s/operations/headlamp/ingress.yaml
+kubectl apply -f k8s/operations/headlamp/rbac.yaml
 ```
 
-Headlamp へのログイン時にトークンが必要になる。以下のコマンドで取得する：
+#### Authentik アプリ作成（UI）
+
+1. Admin → Applications → Providers → OAuth2/OIDC Provider を作成
+   - Name: `headlamp` / Redirect URIs: `https://homelab.local/headlamp/oidc-callback`
+2. Admin → Applications → Application を作成
+   - Slug: `headlamp`、上記 Provider を紐付け
+   - Launch URL: `https://homelab.local/headlamp/`
+3. クライアント ID・シークレットを `k8s/operations/headlamp/values.yaml` の `config.oidc` に記入して helm upgrade
+
+#### CA 証明書・CoreDNS・kube-apiserver の設定
+
+Headlamp pod が Authentik の OIDC discovery endpoint（`https://homelab.local/...`）へアクセスするため、
+以下の追加設定が必要。
 
 ```bash
-kubectl get secret headlamp-token -n operations \
-  -o jsonpath='{.data.token}' | base64 -d
+# CA 証明書を ConfigMap として operations namespace に作成
+kubectl get secret homelab-ca-secret -n cert-manager \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/homelab-ca.crt
+
+kubectl create configmap homelab-ca \
+  --from-file=ca.crt=/tmp/homelab-ca.crt \
+  -n operations --dry-run=client -o yaml | kubectl apply -f -
+
+# CoreDNS に homelab.local を追加
+kubectl apply -f k8s/kube-system/coredns/configmap-patch.yaml
+
+# CA 証明書を全 CP に配布 + /etc/hosts + kube-apiserver OIDC フラグ追加
+for node in k8s-cp-1 k8s-cp-2 k8s-cp-3; do
+  lxc file push /tmp/homelab-ca.crt ${node}/etc/kubernetes/pki/homelab-ca.crt
+  lxc exec ${node} -- bash -c 'grep -q homelab.local /etc/hosts || echo "10.10.0.100 homelab.local" >> /etc/hosts'
+  lxc exec ${node} -- python3 - <<'PYEOF'
+import yaml
+path = "/etc/kubernetes/manifests/kube-apiserver.yaml"
+with open(path) as f:
+    doc = yaml.safe_load(f)
+for c in doc["spec"]["containers"]:
+    if c["name"] == "kube-apiserver":
+        flags = [
+            "--oidc-issuer-url=https://homelab.local/authentik/application/o/headlamp/",
+            "--oidc-client-id=<CLIENT_ID>",
+            "--oidc-username-claim=preferred_username",
+            "--oidc-groups-claim=groups",
+            "--oidc-ca-file=/etc/kubernetes/pki/homelab-ca.crt",
+        ]
+        for f in flags:
+            key = f.split("=")[0]
+            if not any(e.startswith(key) for e in c["command"]):
+                c["command"].append(f)
+with open(path, "w") as f:
+    yaml.dump(doc, f, default_flow_style=False, allow_unicode=True)
+PYEOF
+done
 ```
 
-kube-apiserver が自動再起動する（約 30 秒）。
+kube-apiserver が自動再起動する（約 30 秒 × 3 台）。
 
 ### Authentik
 
@@ -232,16 +281,38 @@ kubectl apply -f k8s/infra/authentik/ingress.yaml
 
 初回セットアップ（UI）：
 1. `https://homelab.local/authentik/if/flow/initial-setup/` にアクセスして管理者パスワードを設定
+
+#### Grafana 連携
+
 2. Admin → Applications → Providers → OAuth2/OIDC Provider を作成
    - Name: `grafana` / Redirect URIs: `https://homelab.local/grafana/login/generic_oauth`
 3. Admin → Applications → Application を作成
    - Slug: `grafana`、上記 Provider を紐付け
    - Launch URL: `https://homelab.local/grafana/`
-4. クライアント ID・シークレットを `k8s/infra/authentik/grafana-oauth-secret.yaml` に記入して apply
+4. クライアント ID・シークレットを以下の形式で apply
 
 ```bash
-kubectl apply -f k8s/infra/authentik/grafana-oauth-secret.yaml
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-oauth-secret
+  namespace: observability
+type: Opaque
+stringData:
+  GF_AUTH_GENERIC_OAUTH_CLIENT_ID: "<CLIENT_ID>"
+  GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET: "<CLIENT_SECRET>"
+EOF
 ```
+
+#### Headlamp 連携
+
+5. Admin → Applications → Providers → OAuth2/OIDC Provider を作成
+   - Name: `headlamp` / Redirect URIs: `https://homelab.local/headlamp/oidc-callback`
+6. Admin → Applications → Application を作成
+   - Slug: `headlamp`、上記 Provider を紐付け
+   - Launch URL: `https://homelab.local/headlamp/`
+7. クライアント ID・シークレットを `k8s/operations/headlamp/values.yaml` の `config.oidc` に記入して helm upgrade
 
 ---
 
