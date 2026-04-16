@@ -1,0 +1,53 @@
+authentik:
+  secret_key: "5260f5c91dd3fb23b144244167b8095f825f34e2820070c537abd79abbdbde9d7be42472e4494b5f4d8e3d1f67a1b3d3c3d1"
+  postgresql:
+    host: "postgres-cluster-rw.database.svc"
+    name: authentik
+    user: authentik
+    password: authentik12345
+  redis:
+    host: "{{ .Release.Name }}-redis-master"
+
+server:
+  env:
+    - name: AUTHENTIK_WEB__PATH
+      value: "/authentik/"
+  startupProbe:
+    httpGet:
+      path: /authentik/-/health/live/
+      port: http
+  readinessProbe:
+    httpGet:
+      path: /authentik/-/health/ready/
+      port: http
+  livenessProbe:
+    httpGet:
+      path: /authentik/-/health/live/
+      port: http
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+worker:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+postgresql:
+  enabled: false
+
+redis:
+  enabled: true
+  master:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 64Mi

@@ -206,6 +206,39 @@ kubectl get secret headlamp-token -n operations \
   -o jsonpath='{.data.token}' | base64 -d
 ```
 
+### Authentik
+
+cert-manager・PostgreSQL インストール後に実行すること。
+Authentik の DB は既存の `postgres-cluster`（database namespace）を流用する。
+
+```bash
+# Authentik 用 DB・ユーザーを既存 postgres-cluster に作成
+PRIMARY=$(kubectl get cluster postgres-cluster -n database -o jsonpath='{.status.currentPrimary}')
+kubectl exec -n database $PRIMARY -- psql -U postgres -c "CREATE USER authentik WITH PASSWORD 'authentik12345';"
+kubectl exec -n database $PRIMARY -- psql -U postgres -c "CREATE DATABASE authentik OWNER authentik;"
+
+# Authentik インストール
+helm repo add authentik https://charts.goauthentik.io
+helm repo update
+helm upgrade --install authentik authentik/authentik \
+  -n infra \
+  -f k8s/infra/authentik/values.yaml \
+  --wait --timeout=300s
+
+kubectl apply -f k8s/infra/authentik/ingress.yaml
+```
+
+初回セットアップ（UI）：
+1. `https://homelab.local/authentik/if/flow/initial-setup/` にアクセスして管理者パスワードを設定
+2. Admin → Applications → Providers → OAuth2/OIDC Provider を作成
+   - Name: `grafana` / Redirect URIs: `https://homelab.local/grafana/login/generic_oauth`
+3. Admin → Applications → Application を作成（Slug: `grafana`、上記 Provider を紐付け）
+4. クライアント ID・シークレットを `k8s/infra/authentik/grafana-oauth-secret.yaml` に記入して apply
+
+```bash
+kubectl apply -f k8s/infra/authentik/grafana-oauth-secret.yaml
+```
+
 ---
 
 ## ストレージ
