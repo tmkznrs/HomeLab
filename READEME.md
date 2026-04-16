@@ -191,20 +191,63 @@ helm install metrics-server metrics-server/metrics-server \
 ```bash
 helm repo add headlamp https://kubernetes-sigs.github.io/headlamp/
 helm repo update
-helm install headlamp headlamp/headlamp \
+helm upgrade --install headlamp headlamp/headlamp \
   -n operations \
   -f k8s/operations/headlamp/values.yaml
 
 kubectl apply -f k8s/operations/headlamp/token.yaml
 kubectl apply -f k8s/operations/headlamp/ingress.yaml
+kubectl apply -f k8s/operations/headlamp/rbac.yaml
 ```
 
-Headlamp へのログイン時にトークンが必要になる。以下のコマンドで取得する：
+Authentik の OIDC でログインする（トークン入力不要）。
+`values.yaml` の OIDC 設定（clientID / clientSecret）は Authentik でアプリを作成後に記入して `helm upgrade` すること。
+
+Authentik アプリ作成手順：
+1. Admin → Applications → Providers → OAuth2/OIDC Provider を作成
+   - Name: `headlamp`
+   - Redirect URIs: `https://homelab.local/headlamp/oidc-callback`
+2. Admin → Applications → Application を作成
+   - Slug: `headlamp` / Provider: 上記 / Launch URL: `https://homelab.local/headlamp/`
+
+#### kube-apiserver OIDC 設定（初回のみ）
+
+Headlamp OIDC では kube-apiserver 側にも OIDC 設定が必要。
 
 ```bash
-kubectl get secret headlamp-token -n operations \
-  -o jsonpath='{.data.token}' | base64 -d
+# CA 証明書を全 CP に配布
+kubectl get secret homelab-ca-secret -n cert-manager \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/homelab-ca.crt
+for node in k8s-cp-1 k8s-cp-2 k8s-cp-3; do
+  lxc file push /tmp/homelab-ca.crt ${node}/etc/kubernetes/pki/homelab-ca.crt
+done
+
+# 各 CP の kube-apiserver マニフェストに OIDC フラグを追加
+for node in k8s-cp-1 k8s-cp-2 k8s-cp-3; do
+  lxc exec ${node} -- python3 -c "
+import yaml
+path = '/etc/kubernetes/manifests/kube-apiserver.yaml'
+with open(path) as f:
+    m = yaml.safe_load(f)
+cmd = m['spec']['containers'][0]['command']
+flags = [
+    '--oidc-issuer-url=https://homelab.local/authentik/application/o/headlamp/',
+    '--oidc-client-id=<CLIENT_ID>',
+    '--oidc-username-claim=preferred_username',
+    '--oidc-groups-claim=groups',
+    '--oidc-ca-file=/etc/kubernetes/pki/homelab-ca.crt',
+]
+for f in flags:
+    key = f.split('=')[0]
+    if not any(c.startswith(key) for c in cmd):
+        cmd.append(f)
+with open(path, 'w') as f:
+    yaml.dump(m, f, default_flow_style=False, allow_unicode=True)
+"
+done
 ```
+
+kube-apiserver が自動再起動する（約 30 秒）。
 
 ### Authentik
 
