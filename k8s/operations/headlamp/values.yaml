@@ -1,5 +1,20 @@
 config:
   baseURL: /headlamp
+  oidc:
+    clientID: "V9ViUOtefOdnvVvzE4WJuco2X4KrXIVNsvxOngAY"
+    clientSecret: "w5mRUwMMtPI7TxhT4vxhYJ0MhYtBHLB3fFirUrj3OvEhvxOOmNgbXLBdQRqGxe1KL2syPrErpu8k0J1cLrhoobdweURWL4RKYJZsKJpwVLGSc80fkzDMh74DrbIsWN27"
+    issuerURL: "https://homelab.local/authentik/application/o/headlamp/"
+    scopes: "openid profile email"
+  extraArgs:
+    - "-oidc-ca-file=/etc/ssl/certs/homelab-ca.crt"
+volumes:
+  - name: homelab-ca
+    configMap:
+      name: homelab-ca
+volumeMounts:
+  - name: homelab-ca
+    mountPath: /etc/ssl/certs/homelab-ca.crt
+    subPath: ca.crt
 service:
   type: ClusterIP
   port: 80
