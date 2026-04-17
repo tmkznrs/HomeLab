@@ -188,25 +188,62 @@ helm install metrics-server metrics-server/metrics-server \
 
 ### Headlamp
 
+Authentik OIDC 認証を使用する。事前に Authentik のセットアップ（後述）と Headlamp アプリ作成を完了すること。
+
+#### Authentik アプリ作成（UI）
+
+1. Admin → Applications → Providers → OAuth2/OIDC Provider を作成
+   - Name: `headlamp` / Client type: `Confidential`
+   - Redirect URIs: `https://homelab.local/headlamp/oidc-callback`
+2. Admin → Applications → Application を作成
+   - Slug: `headlamp`、上記 Provider を紐付け
+   - Launch URL: `https://homelab.local/headlamp/`
+3. クライアント ID・シークレットを `k8s/operations/headlamp/values.yaml` の `config.oidc` に記入
+
+#### CP ノードの準備
+
+kube-apiserver が OIDC issuer URL（`https://homelab.local/...`）を検証するため、各 CP ノードに設定が必要。
+
+```bash
+# homelab.local の名前解決（LXD コンテナ再起動後も永続）
+for node in k8s-cp-1 k8s-cp-2 k8s-cp-3; do
+  lxc exec $node -- bash -c 'grep -q homelab.local /etc/hosts || echo "10.10.0.100 homelab.local" >> /etc/hosts'
+done
+
+# CA 証明書を配布（kube-apiserver が Authentik の TLS を検証するために必要）
+for node in k8s-cp-1 k8s-cp-2 k8s-cp-3; do
+  lxc file push homelab-ca.crt ${node}/etc/kubernetes/pki/homelab-ca.crt
+done
+
+# kube-apiserver に OIDC フラグを追加（各 CP ノードの manifest を編集）
+for node in k8s-cp-1 k8s-cp-2 k8s-cp-3; do
+  lxc exec $node -- sed -i '/--tls-cert-file/a\    - --oidc-issuer-url=https://homelab.local/authentik/application/o/headlamp/\n    - --oidc-client-id=<CLIENT_ID>\n    - --oidc-username-claim=preferred_username\n    - --oidc-groups-claim=groups\n    - --oidc-ca-file=/etc/kubernetes/pki/homelab-ca.crt' \
+    /etc/kubernetes/manifests/kube-apiserver.yaml
+done
+# → kube-apiserver が自動再起動（約 30 秒 × 3 台）
+```
+
+#### Headlamp のインストール・設定
+
 ```bash
 helm repo add headlamp https://kubernetes-sigs.github.io/headlamp/
 helm repo update
-helm install headlamp headlamp/headlamp \
+helm upgrade --install headlamp headlamp/headlamp \
   -n operations \
   -f k8s/operations/headlamp/values.yaml
 
-kubectl apply -f k8s/operations/headlamp/token.yaml
+# CA 証明書を ConfigMap として作成
+kubectl get secret homelab-ca-secret -n cert-manager \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/homelab-ca.crt
+kubectl create configmap homelab-ca \
+  --from-file=ca.crt=/tmp/homelab-ca.crt \
+  -n operations --dry-run=client -o yaml | kubectl apply -f -
+
+# CoreDNS・RBAC を適用
+kubectl apply -f k8s/kube-system/coredns/configmap-patch.yaml
 kubectl apply -f k8s/operations/headlamp/ingress.yaml
+kubectl apply -f k8s/operations/headlamp/rbac.yaml
 ```
-
-Headlamp へのログイン時にトークンが必要になる。以下のコマンドで取得する：
-
-```bash
-kubectl get secret headlamp-token -n operations \
-  -o jsonpath='{.data.token}' | base64 -d
-```
-
-kube-apiserver が自動再起動する（約 30 秒）。
 
 ### Authentik
 
