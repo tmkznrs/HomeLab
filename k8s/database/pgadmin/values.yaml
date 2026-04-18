@@ -1,0 +1,40 @@
+env:
+  email: admin@example.com
+  password: admin
+  contextPath: /pgadmin
+
+envVarsExtra:
+  - name: OAUTH2_CLIENT_ID
+    valueFrom:
+      secretKeyRef:
+        name: pgadmin-oauth2-secret
+        key: OAUTH2_CLIENT_ID
+  - name: OAUTH2_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: pgadmin-oauth2-secret
+        key: OAUTH2_CLIENT_SECRET
+
+extraConfigmapMounts:
+  - name: pgadmin-config
+    mountPath: /pgadmin4/config_local.py
+    subPath: config_local.py
+    configMap: pgadmin-config
+    readOnly: true
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 256Mi
+  limits:
+    memory: 512Mi
+
+persistentVolume:
+  storageClass: local-path
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false

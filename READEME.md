@@ -39,6 +39,7 @@ LXD コンテナ上に HA 構成の Kubernetes クラスターを構築し、obs
 | Hubble UI | https://homelab.local/hubble/ |
 | Headlamp | https://homelab.local/headlamp/ (Authentik OIDC) |
 | Authentik | https://homelab.local/authentik/ |
+| pgAdmin | https://homelab.local/pgadmin/ (Authentik OIDC) |
 
 ---
 
@@ -375,7 +376,7 @@ helm repo update
 
 ### 1. PostgreSQL (CloudNativePG)
 
-Grafana のバックエンド DB。
+Grafana・Authentik のバックエンド DB。
 
 ```bash
 helm upgrade --install cnpg cnpg/cloudnative-pg \
@@ -390,7 +391,27 @@ kubectl wait cluster/postgres-cluster -n database \
   --for=condition=Ready --timeout=300s
 ```
 
-### 2. Grafana Operator + Grafana
+### 2. pgAdmin
+
+Authentik で OAuth2/OIDC Provider・Application `pgadmin` を事前作成し、Client ID/Secret を `k8s/database/pgadmin/oauth2-secret.yaml` に記載してから実行する。
+Redirect URI: `https://homelab.local/pgadmin/oauth2/authorize`
+
+```bash
+helm repo add runix https://helm.runix.net
+helm repo update
+
+kubectl apply -f k8s/database/pgadmin/config-configmap.yaml
+kubectl apply -f k8s/database/pgadmin/oauth2-secret.yaml
+
+helm upgrade --install pgadmin runix/pgadmin4 \
+  -n database \
+  -f k8s/database/pgadmin/values.yaml \
+  --wait
+
+kubectl apply -f k8s/database/pgadmin/ingress.yaml
+```
+
+### 4. Grafana Operator + Grafana
 
 ```bash
 helm upgrade --install grafana-operator \
@@ -404,7 +425,7 @@ kubectl apply -f k8s/observability/05-grafana/grafana.yaml
 kubectl apply -f k8s/observability/05-grafana/ingress.yaml
 ```
 
-### 3. Loki
+### 5. Loki
 
 ```bash
 helm upgrade --install loki grafana/loki \
@@ -414,7 +435,7 @@ helm upgrade --install loki grafana/loki \
 kubectl apply -f k8s/observability/06-loki/ingress.yaml
 ```
 
-### 4. Mimir
+### 6. Mimir
 
 ```bash
 helm upgrade --install mimir grafana/mimir-distributed \
@@ -425,7 +446,7 @@ kubectl apply -f k8s/observability/07-mimir/recording-rules.yaml
 kubectl apply -f k8s/observability/07-mimir/ingress.yaml
 ```
 
-### 5. Tempo
+### 7. Tempo
 
 ```bash
 helm upgrade --install tempo grafana-community/tempo-distributed \
@@ -435,7 +456,7 @@ helm upgrade --install tempo grafana-community/tempo-distributed \
 kubectl apply -f k8s/observability/08-tempo/ingress.yaml
 ```
 
-### 6. kube-state-metrics
+### 8. kube-state-metrics
 
 ```bash
 helm upgrade --install kube-state-metrics prometheus-community/kube-state-metrics \
@@ -443,7 +464,7 @@ helm upgrade --install kube-state-metrics prometheus-community/kube-state-metric
   -f k8s/observability/10-kube-state-metrics/values.yaml
 ```
 
-### 7. Alloy
+### 9. Alloy
 
 ```bash
 helm upgrade --install alloy grafana/alloy \
@@ -454,7 +475,7 @@ kubectl apply -f k8s/observability/09-alloy/service.yaml
 kubectl apply -f k8s/observability/09-alloy/ingress.yaml
 ```
 
-### 8. データソース・ダッシュボード
+### 10. データソース・ダッシュボード
 
 ```bash
 kubectl apply -f k8s/observability/05-grafana/datasource-loki.yaml

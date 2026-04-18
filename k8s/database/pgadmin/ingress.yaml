@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pgadmin
+  namespace: database
+  annotations:
+    cert-manager.io/cluster-issuer: homelab-ca-issuer
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: homelab.local
+      http:
+        paths:
+          - path: /pgadmin
+            pathType: Prefix
+            backend:
+              service:
+                name: pgadmin-pgadmin4
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - homelab.local
+      secretName: homelab-tls
