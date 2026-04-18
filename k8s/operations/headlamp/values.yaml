@@ -4,7 +4,7 @@ config:
     clientID: "V9ViUOtefOdnvVvzE4WJuco2X4KrXIVNsvxOngAY"
     clientSecret: "w5mRUwMMtPI7TxhT4vxhYJ0MhYtBHLB3fFirUrj3OvEhvxOOmNgbXLBdQRqGxe1KL2syPrErpu8k0J1cLrhoobdweURWL4RKYJZsKJpwVLGSc80fkzDMh74DrbIsWN27"
     issuerURL: "https://homelab.local/authentik/application/o/headlamp/"
-    scopes: "openid profile email"
+    scopes: "openid profile email offline_access"
   extraArgs:
     - "-oidc-ca-file=/etc/ssl/certs/homelab-ca.crt"
 volumes:

@@ -79,6 +79,11 @@ Alloy (DaemonSet, all nodes incl. control-plane)
 - **Cilium** runs in kube-proxy replacement mode (`kubeProxyReplacement: true`), native routing, pod CIDR `10.244.0.0/16`. Control plane VIP: `10.10.0.10` (kube-vip, ARP mode).
 - **metrics-server** requires `--kubelet-insecure-tls` because LXD kubelet certs lack IP SANs.
 
+## Rules
+
+- **git commit は明示的に「コミットして」と指示されるまで実行しない。**動作確認が取れていない変更はコミットしない。
+- ファイルの復元・変更取り消しは `git checkout`・`git clean` などの git コマンドを使う。
+
 ### Directory layout
 ```
 k8s/
