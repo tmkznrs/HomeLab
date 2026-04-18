@@ -35,9 +35,10 @@ LXD コンテナ上に HA 構成の Kubernetes クラスターを構築し、obs
 | サービス | URL |
 |---|---|
 | Grafana | https://homelab.local/grafana/ (admin / admin) |
-| MinIO コンソール | https://homelab.local/minio-console/ (minio / minio12345) |
+| MinIO コンソール | https://homelab.local/minio-console/ (minio / minio12345 または Authentik OIDC) |
 | Hubble UI | https://homelab.local/hubble/ |
-| Headlamp | https://homelab.local/headlamp/ |
+| Headlamp | https://homelab.local/headlamp/ (Authentik OIDC) |
+| Authentik | https://homelab.local/authentik/ |
 
 ---
 
@@ -190,6 +191,9 @@ helm install metrics-server metrics-server/metrics-server \
 
 Authentik OIDC 認証を使用する。事前に Authentik のセットアップ（後述）と Headlamp アプリ作成を完了すること。
 
+> **既知の制限**: Headlamp は OIDC アクセストークンをプロアクティブにリフレッシュしない。
+> セッション継続時間は Authentik の `access_token_validity` と一致する（詳細: `docs/troubleshooting/headlamp-oidc-session.md`）。
+
 #### Authentik アプリ作成（UI）
 
 1. Admin → Applications → Providers → OAuth2/OIDC Provider を作成
@@ -308,6 +312,40 @@ helm upgrade --install minio-tenant minio-operator/tenant \
 ```
 
 Tenant 仕様: 3 servers × 2 volumes × 50 GiB、サービス名 `minio.storage.svc`
+
+#### MinIO OIDC 設定（Authentik）
+
+Authentik Admin UI で以下を行う。
+
+1. **Scope Mapping 作成**: Customization → Property Mappings → Create → Scope Mapping
+   - Name: `MinIO Policy`
+   - Scope name: `minio_policy`
+   - Expression:
+     ```python
+     return {"policy": "consoleAdmin"}
+     ```
+
+2. **Provider 作成**: Applications → Providers → OAuth2/OIDC Provider
+   - Name: `minio` / Client type: `Confidential`
+   - Redirect URIs: `https://homelab.local/minio-console/oauth_callback`
+   - Scopes: 上記 `MinIO Policy` を追加
+
+3. **Application 作成**: Applications → Applications
+   - Slug: `minio` / Provider: 上記 / Launch URL: `https://homelab.local/minio-console/`
+
+4. クライアント ID・シークレットを `k8s/storage/minio/tenant-values.yaml` の `env` セクションに記入して apply
+
+```bash
+# homelab-ca ConfigMap を storage namespace にコピー
+kubectl get configmap homelab-ca -n operations -o yaml \
+  | sed 's/namespace: operations/namespace: storage/' \
+  | kubectl apply -f -
+
+helm upgrade minio-tenant minio-operator/tenant -n storage -f k8s/storage/minio/tenant-values.yaml
+```
+
+> **注意**: MinIO Operator sidecar (v7.0.1) は `valueFrom.secretKeyRef` を解決しないバグがあるため、
+> クライアントシークレットは `value:` で直接指定する（[#2279](https://github.com/minio/operator/issues/2279)）。
 
 ### MinIO コンソール Ingress
 
