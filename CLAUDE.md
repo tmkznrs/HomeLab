@@ -35,7 +35,7 @@ kubectl port-forward -n observability svc/alloy 12345:12345
 
 ### Export CA cert (after cert-manager setup)
 ```bash
-kubectl get secret homelab-ca-secret -n cert-manager \
+kubectl get secret homelab-ca-secret -n infra \
   -o jsonpath='{.data.tls\.crt}' | base64 -d > homelab-ca.crt
 ```
 

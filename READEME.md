@@ -127,19 +127,19 @@ kubectl apply -f k8s/namespaces/
 helm repo add jetstack https://charts.jetstack.io
 helm repo update
 helm upgrade --install cert-manager jetstack/cert-manager \
-  -n cert-manager --create-namespace \
+  -n infra \
   -f k8s/infra/cert-manager/values.yaml \
   --wait
 
 # 自己署名 CA ClusterIssuer を作成
 kubectl apply -f k8s/infra/cert-manager/cluster-issuer.yaml
-kubectl wait certificate/homelab-ca -n cert-manager --for=condition=Ready --timeout=60s
+kubectl wait certificate/homelab-ca -n infra --for=condition=Ready --timeout=60s
 ```
 
 CA 証明書をエクスポートしてアクセス端末にインポートする（初回のみ）：
 
 ```bash
-kubectl get secret homelab-ca-secret -n cert-manager \
+kubectl get secret homelab-ca-secret -n infra \
   -o jsonpath='{.data.tls\.crt}' | base64 -d > homelab-ca.crt
 ```
 
@@ -237,7 +237,7 @@ helm upgrade --install headlamp headlamp/headlamp \
   -f k8s/operations/headlamp/values.yaml
 
 # CA 証明書を ConfigMap として作成
-kubectl get secret homelab-ca-secret -n cert-manager \
+kubectl get secret homelab-ca-secret -n infra \
   -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/homelab-ca.crt
 kubectl create configmap homelab-ca \
   --from-file=ca.crt=/tmp/homelab-ca.crt \
