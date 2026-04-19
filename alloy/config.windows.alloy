@@ -1,0 +1,93 @@
+// Windows Alloy Agent Configuration
+// Collects Windows system metrics and event logs, forwards to homelab Mimir/Loki.
+//
+// Prerequisites (run once on Windows):
+//   1. Export homelab CA cert from cluster:
+//        kubectl get secret homelab-ca-secret -n infra \
+//          -o jsonpath='{.data.tls\.crt}' | base64 -d > homelab-ca.crt
+//
+//   2. Install CA cert into Windows trusted root (Admin PowerShell):
+//        Import-Certificate -FilePath homelab-ca.crt -CertStoreLocation Cert:\LocalMachine\Root
+//
+//   3. Add homelab.local to hosts file (Admin PowerShell):
+//        Add-Content C:\Windows\System32\drivers\etc\hosts "10.10.0.100  homelab.local"
+//
+//   4. Copy this file to:
+//        C:\Program Files\GrafanaLabs\Alloy\config.alloy
+//
+//   5. Restart Alloy service:
+//        Restart-Service "Alloy"
+//
+//   6. Verify: http://localhost:12345 (Alloy UI)
+
+// ---- Windows System Metrics → Mimir ----
+
+prometheus.exporter.windows "local" {
+  enabled_collectors = ["cpu", "memory", "logical_disk", "net", "os", "system"]
+}
+
+prometheus.scrape "windows" {
+  targets         = prometheus.exporter.windows.local.targets
+  forward_to      = [prometheus.relabel.windows_labels.receiver]
+  scrape_interval = "60s"
+}
+
+prometheus.relabel "windows_labels" {
+  forward_to = [prometheus.remote_write.mimir.receiver]
+
+  rule {
+    target_label = "job"
+    replacement  = "windows"
+  }
+  rule {
+    target_label = "instance"
+    replacement  = constants.hostname
+  }
+}
+
+prometheus.remote_write "mimir" {
+  endpoint {
+    url = "https://homelab.local/mimir/api/v1/push"
+  }
+}
+
+// ---- Windows Event Logs → Loki ----
+
+loki.source.windowsevent "system" {
+  eventlog_name          = "System"
+  use_incoming_timestamp = true
+  forward_to             = [loki.write.loki.receiver]
+  labels = {
+    job      = "windows-events",
+    channel  = "system",
+    instance = constants.hostname,
+  }
+}
+
+loki.source.windowsevent "application" {
+  eventlog_name          = "Application"
+  use_incoming_timestamp = true
+  forward_to             = [loki.write.loki.receiver]
+  labels = {
+    job      = "windows-events",
+    channel  = "application",
+    instance = constants.hostname,
+  }
+}
+
+loki.source.windowsevent "security" {
+  eventlog_name          = "Security"
+  use_incoming_timestamp = true
+  forward_to             = [loki.write.loki.receiver]
+  labels = {
+    job      = "windows-events",
+    channel  = "security",
+    instance = constants.hostname,
+  }
+}
+
+loki.write "loki" {
+  endpoint {
+    url = "https://homelab.local/loki/api/v1/push"
+  }
+}
