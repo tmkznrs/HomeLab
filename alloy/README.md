@@ -13,7 +13,7 @@
 | 送信先 | URL |
 |--------|-----|
 | Mimir  | `https://homelab.local/mimir/api/v1/push` |
-| Loki   | `https://homelab.local/loki/loki/api/v1/push` |
+| Loki   | `https://homelab.local/loki/api/v1/push` |
 
 ### homelab CA 証明書の取得
 
@@ -71,3 +71,12 @@ Add-Content C:\Windows\System32\drivers\etc\hosts "10.10.0.100  homelab.local"
 - Alloy UI: `http://localhost:12345`
 - Grafana → Explore → Mimir: `{job="windows"}`
 - Grafana → Explore → Loki: `{job="windows-events"}`
+
+---
+
+## 死活監視（クラスター側）
+
+外部マシンの死活監視は Windows Alloy 自体が停止すると途切れるため、クラスター側の単一レプリカ Alloy Deployment（`k8s/observability/10-alloy-probe/`）から ICMP プローブで監視する。
+
+- Grafana → Explore → Mimir: `probe_success{job="external-probe"}`
+- `probe_duration_seconds{job="external-probe"}` で RTT を確認

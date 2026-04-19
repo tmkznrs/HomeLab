@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alloy-probe
+  namespace: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alloy-probe
+  template:
+    metadata:
+      labels:
+        app: alloy-probe
+    spec:
+      containers:
+        - name: alloy
+          image: docker.io/grafana/alloy:v1.15.0
+          args:
+            - run
+            - /etc/alloy/config.alloy
+            - --storage.path=/tmp/alloy
+            - --server.http.listen-addr=0.0.0.0:12345
+          securityContext:
+            capabilities:
+              add: ["NET_RAW"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alloy
+      volumes:
+        - name: config
+          configMap:
+            name: alloy-probe
