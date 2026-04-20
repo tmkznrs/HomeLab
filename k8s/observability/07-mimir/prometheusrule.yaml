@@ -171,10 +171,22 @@ spec:
             (1 - (
               node_memory_MemAvailable_bytes{job="integrations/unix"}
               / node_memory_MemTotal_bytes{job="integrations/unix"}
-            )) * 100 > 90
+            )) * 100 > 80
           for: 5m
           labels:
             severity: warning
           annotations:
             summary: "Node memory usage high: {{ $labels.instance }}"
+            description: "Memory usage is {{ $value | humanize }}% (threshold: 80%)"
+        - alert: NodeMemoryCritical
+          expr: |
+            (1 - (
+              node_memory_MemAvailable_bytes{job="integrations/unix"}
+              / node_memory_MemTotal_bytes{job="integrations/unix"}
+            )) * 100 > 90
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Node memory usage critical: {{ $labels.instance }}"
             description: "Memory usage is {{ $value | humanize }}% (threshold: 90%)"
