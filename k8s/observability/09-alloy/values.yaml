@@ -23,6 +23,9 @@ rbac:
     - apiGroups: [""]
       resources: ["nodes", "nodes/proxy", "nodes/metrics"]
       verbs: ["get", "list", "watch"]
+    - apiGroups: ["monitoring.coreos.com"]
+      resources: ["prometheusrules"]
+      verbs: ["get", "list", "watch"]
 
 alloy:
   # loki.source.kubernetes は public-preview
@@ -261,4 +264,10 @@ alloy:
             insecure = true
           }
         }
+      }
+
+      // ── Rules: PrometheusRule CRD → Mimir Ruler ────────────────────────────────
+      mimir.rules.kubernetes "default" {
+        address   = "http://mimir-ruler.observability.svc:8080"
+        tenant_id = "anonymous"
       }

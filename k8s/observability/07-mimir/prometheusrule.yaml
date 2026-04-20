@@ -1,0 +1,180 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: mimir-rules
+  namespace: observability
+spec:
+  groups:
+    - name: k8s.rules.container_resource
+      interval: 2m
+      rules:
+        - record: node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate
+          expr: |
+            sum by (cluster, namespace, pod, container) (
+              irate(container_cpu_usage_seconds_total{job="prometheus.scrape.cadvisor",image!=""}[5m])
+            ) * on (cluster, namespace, pod) group_left(node) topk by (cluster, namespace, pod) (
+              1, max by (cluster, namespace, pod, node) (kube_pod_info{node!=""})
+            )
+        - record: node_namespace_pod_container:container_memory_working_set_bytes
+          expr: |
+            container_memory_working_set_bytes{job="prometheus.scrape.cadvisor",image!=""}
+            * on (cluster, namespace, pod) group_left(node) topk by (cluster, namespace, pod) (
+              1, max by (cluster, namespace, pod, node) (kube_pod_info{node!=""})
+            )
+        - record: node_namespace_pod_container:container_memory_rss
+          expr: |
+            container_memory_rss{job="prometheus.scrape.cadvisor",image!=""}
+            * on (cluster, namespace, pod) group_left(node) topk by (cluster, namespace, pod) (
+              1, max by (cluster, namespace, pod, node) (kube_pod_info{node!=""})
+            )
+        - record: node_namespace_pod_container:container_memory_cache
+          expr: |
+            container_memory_cache{job="prometheus.scrape.cadvisor",image!=""}
+            * on (cluster, namespace, pod) group_left(node) topk by (cluster, namespace, pod) (
+              1, max by (cluster, namespace, pod, node) (kube_pod_info{node!=""})
+            )
+        - record: node_namespace_pod_container:container_memory_swap
+          expr: |
+            container_memory_swap{job="prometheus.scrape.cadvisor",image!=""}
+            * on (cluster, namespace, pod) group_left(node) topk by (cluster, namespace, pod) (
+              1, max by (cluster, namespace, pod, node) (kube_pod_info{node!=""})
+            )
+
+    - name: k8s.rules.pod_owner
+      interval: 2m
+      rules:
+        - record: namespace_workload_pod:kube_pod_owner:relabel
+          expr: |
+            max by (cluster, namespace, workload, pod) (
+              label_replace(
+                label_replace(
+                  kube_pod_owner{owner_kind="ReplicaSet"},
+                  "replicaset", "$1", "owner_name", "(.*)"
+                ) * on (replicaset, namespace) group_left(owner_name) topk by (replicaset, namespace) (
+                  1, max by (replicaset, namespace, owner_name) (kube_replicaset_owner)
+                ),
+                "workload", "$1", "owner_name", "(.*)"
+              )
+            )
+          labels:
+            workload_type: deployment
+        - record: namespace_workload_pod:kube_pod_owner:relabel
+          expr: |
+            max by (cluster, namespace, workload, pod) (
+              label_replace(
+                kube_pod_owner{owner_kind="DaemonSet"},
+                "workload", "$1", "owner_name", "(.*)"
+              )
+            )
+          labels:
+            workload_type: daemonset
+        - record: namespace_workload_pod:kube_pod_owner:relabel
+          expr: |
+            max by (cluster, namespace, workload, pod) (
+              label_replace(
+                kube_pod_owner{owner_kind="StatefulSet"},
+                "workload", "$1", "owner_name", "(.*)"
+              )
+            )
+          labels:
+            workload_type: statefulset
+        - record: namespace_workload_pod:kube_pod_owner:relabel
+          expr: |
+            max by (cluster, namespace, workload, pod) (
+              label_replace(
+                kube_pod_owner{owner_kind="Job"},
+                "workload", "$1", "owner_name", "(.*)"
+              )
+            )
+          labels:
+            workload_type: job
+
+    - name: k8s.rules.resource_requests
+      interval: 2m
+      rules:
+        - record: cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests
+          expr: |
+            kube_pod_container_resource_requests{resource="cpu", job="prometheus.scrape.kube_state_metrics"}
+            * on (namespace, pod, cluster) group_left() max by (namespace, pod, cluster) (
+              (kube_pod_status_phase{phase=~"Pending|Running"} == 1)
+            )
+        - record: cluster:namespace:pod_memory:active:kube_pod_container_resource_requests
+          expr: |
+            kube_pod_container_resource_requests{resource="memory", job="prometheus.scrape.kube_state_metrics"}
+            * on (namespace, pod, cluster) group_left() max by (namespace, pod, cluster) (
+              (kube_pod_status_phase{phase=~"Pending|Running"} == 1)
+            )
+        - record: cluster:namespace:pod_cpu:active:kube_pod_container_resource_limits
+          expr: |
+            kube_pod_container_resource_limits{resource="cpu", job="prometheus.scrape.kube_state_metrics"}
+            * on (namespace, pod, cluster) group_left() max by (namespace, pod, cluster) (
+              (kube_pod_status_phase{phase=~"Pending|Running"} == 1)
+            )
+        - record: cluster:namespace:pod_memory:active:kube_pod_container_resource_limits
+          expr: |
+            kube_pod_container_resource_limits{resource="memory", job="prometheus.scrape.kube_state_metrics"}
+            * on (namespace, pod, cluster) group_left() max by (namespace, pod, cluster) (
+              (kube_pod_status_phase{phase=~"Pending|Running"} == 1)
+            )
+        - record: namespace_cpu:kube_pod_container_resource_requests:sum
+          expr: |
+            sum by (namespace, cluster) (
+              sum by (namespace, pod, cluster) (
+                max by (namespace, pod, container, cluster) (
+                  kube_pod_container_resource_requests{resource="cpu", job="prometheus.scrape.kube_state_metrics"}
+                ) * on (namespace, pod, cluster) group_left() max by (namespace, pod, cluster) (
+                  kube_pod_status_phase{phase=~"Pending|Running"} == 1
+                )
+              )
+            )
+        - record: namespace_memory:kube_pod_container_resource_requests:sum
+          expr: |
+            sum by (namespace, cluster) (
+              sum by (namespace, pod, cluster) (
+                max by (namespace, pod, container, cluster) (
+                  kube_pod_container_resource_requests{resource="memory", job="prometheus.scrape.kube_state_metrics"}
+                ) * on (namespace, pod, cluster) group_left() max by (namespace, pod, cluster) (
+                  kube_pod_status_phase{phase=~"Pending|Running"} == 1
+                )
+              )
+            )
+
+    - name: node.rules
+      interval: 2m
+      rules:
+        - record: node:node_num_cpu:sum
+          expr: |
+            count by (cluster, node) (
+              sum by (node, cpu, cluster) (
+                node_cpu_seconds_total{job="integrations/unix"} * on (namespace, pod, cluster) group_left(node)
+                topk by (namespace, pod, cluster) (1, node_namespace_pod:kube_pod_info:)
+              )
+            )
+        - record: node:node_memory_bytes_total:sum
+          expr: |
+            sum by (node, cluster) (
+              node_memory_MemTotal_bytes{job="integrations/unix"} * on (namespace, pod, cluster) group_left(node)
+              topk by (namespace, pod, cluster) (1, node_namespace_pod:kube_pod_info:)
+            )
+        - record: "node_namespace_pod:kube_pod_info:"
+          expr: |
+            topk by (namespace, pod, cluster) (1,
+              max by (node, namespace, pod, cluster) (
+                label_replace(kube_pod_info{job="prometheus.scrape.kube_state_metrics", node!=""}, "pod", "$1", "pod", "(.*)")
+              )
+            )
+
+    - name: node.alerts
+      rules:
+        - alert: NodeMemoryHigh
+          expr: |
+            (1 - (
+              node_memory_MemAvailable_bytes{job="integrations/unix"}
+              / node_memory_MemTotal_bytes{job="integrations/unix"}
+            )) * 100 > 90
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Node memory usage high: {{ $labels.instance }}"
+            description: "Memory usage is {{ $value | humanize }}% (threshold: 90%)"

@@ -143,7 +143,34 @@ compactor:
       memory: 256Mi
 
 alertmanager:
-  enabled: false
+  enabled: true
+  replicas: 1
+  persistentVolume:
+    storageClass: local-path
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  fallbackConfig: |
+    global:
+      smtp_smarthost: smtp.gmail.com:587
+      smtp_from: tmkznrs@gmail.com
+      smtp_auth_username: tmkznrs@gmail.com
+      smtp_auth_password: kqawoiqyouurfzbe
+      smtp_require_tls: true
+    route:
+      receiver: gmail
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+    receivers:
+      - name: gmail
+        email_configs:
+          - to: tmkznrs@gmail.com
+            send_resolved: true
 
 ruler:
   enabled: true
