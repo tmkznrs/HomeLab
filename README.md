@@ -442,9 +442,18 @@ helm upgrade --install mimir grafana/mimir-distributed \
   -n observability \
   -f k8s/observability/07-mimir/values.yaml
 
-kubectl apply -f k8s/observability/07-mimir/recording-rules.yaml
+kubectl apply -f k8s/observability/07-mimir/prometheusrule.yaml
 kubectl apply -f k8s/observability/07-mimir/ingress.yaml
 ```
+
+`prometheusrule.yaml` には recording rules と以下のアラートルールが含まれる。
+
+| アラート | 条件 | 重大度 |
+|---|---|---|
+| NodeMemoryHigh | メモリ使用率 > 80% (5分継続) | warning |
+| NodeMemoryCritical | メモリ使用率 > 90% (5分継続) | critical |
+
+Alertmanager は `values.yaml` の `alertmanager.fallbackConfig` に Gmail SMTP 設定を持ち、アラート発火時に `tmkznrs@gmail.com` へメール通知する。PrometheusRule は Alloy の `mimir.rules.kubernetes` コンポーネントが Mimir へ自動同期する。
 
 ### 7. Tempo
 
@@ -484,6 +493,32 @@ kubectl apply -f k8s/observability/05-grafana/datasource-tempo.yaml
 kubectl apply -f k8s/observability/05-grafana/dashboards/
 ```
 
+### 11. alloy-probe (外部マシン ICMP 死活監視)
+
+クラスター側の単一レプリカ Alloy Deployment から外部マシンへ ICMP プローブを送信する。
+Windows Alloy など外部エージェントが停止した場合でも監視が継続される。
+
+```bash
+kubectl apply -f k8s/observability/10-alloy-probe/configmap.yaml
+kubectl apply -f k8s/observability/10-alloy-probe/deployment.yaml
+```
+
+監視結果は Grafana → Explore → Mimir で確認:
+- `probe_success{job="external-probe"}` — 死活 (1=OK, 0=NG)
+- `probe_duration_seconds{job="external-probe"}` — RTT
+
+---
+
+## 外部 Alloy エージェント
+
+クラスター外のマシン（Windows など）からメトリクス・ログを収集して Mimir / Loki へ送信する。
+設定ファイルと詳細手順は [`alloy/README.md`](alloy/README.md) を参照。
+
+| ファイル | 対象 | 収集内容 |
+|---|---|---|
+| `alloy/config.windows.alloy` | Windows | システムメトリクス、イベントログ |
+
+---
 
 ## 各コンポーネントの管理画面パス
 
