@@ -84,16 +84,39 @@ Alloy (DaemonSet, all nodes incl. control-plane)
 - **git commit は明示的に「コミットして」と指示されるまで実行しない。**動作確認が取れていない変更はコミットしない。
 - ファイルの復元・変更取り消しは `git checkout`・`git clean` などの git コマンドを使う。
 
+### Alerting / PrometheusRule
+
+- PrometheusRule CRD は Alloy の `mimir.rules.kubernetes` が Mimir Ruler へ同期する。`poll_interval: 2m` のため反映に最大2分かかる。
+- Mimir Ruler API を直接操作する場合は `X-Scope-OrgID: anonymous` ヘッダーが必須。
+  ```bash
+  kubectl run -n observability curl-test --image=curlimages/curl --rm -it --restart=Never -- \
+    curl -s -H "X-Scope-OrgID: anonymous" http://mimir-ruler.observability.svc:8080/prometheus/api/v1/rules
+  ```
+- アラート式のメモリ使用率は `node_memory_MemAvailable_bytes` ベース（OS の実空き）で判断する。`kubectl top` / Headlamp が示す working set とは異なる（ページキャッシュの扱いが違うため）。
+
+### 障害調査の初動
+
+```bash
+# OOMKill の確認（kube-state-metrics メトリクス）
+kubectl get events -A --field-selector reason=OOMKilling
+# Pod の異常終了理由
+kubectl get pod <name> -n <ns> -o jsonpath='{.status.containerStatuses[*].lastState.terminated.reason}'
+# 直近のログ
+kubectl logs <pod> -n <ns> --previous
+```
+
 ### Directory layout
 ```
 k8s/
   namespaces/          # Namespace definitions (infra, observability, operations)
-  infra/               # cert-manager, ingress-nginx, metallb, minio (operator + tenant)
+  infra/               # cert-manager, ingress-nginx, metallb, authentik
   kube-system/         # cilium, metrics-server
-  local-path-storage/  # local-path-provisioner
-  observability/       # numbered 03–10: postgres, grafana-operator, grafana, loki,
-                       #   mimir, tempo, alloy, kube-state-metrics
+  storage/             # local-path-provisioner, minio (operator + tenant)
+  database/            # postgres (CloudNativePG), pgadmin
+  observability/       # numbered 04–10: grafana-operator, grafana, loki,
+                       #   mimir, tempo, alloy, alloy-probe, kube-state-metrics
   operations/          # headlamp
+alloy/                 # 外部マシン向け Alloy 設定（Windows など）
 lxd/                   # LXD preseed (init.yaml) and k8s node profile (profile.yaml)
 scripts/               # Numbered bootstrap scripts (00–10) for initial cluster setup
 docs/troubleshooting/  # Investigation notes for known issues
