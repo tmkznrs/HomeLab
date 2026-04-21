@@ -16,3 +16,5 @@ spec:
     jsonData:
       httpMethod: POST
       timeInterval: 60s
+      ruler_url: http://mimir-gateway.observability.svc/prometheus
+      manageAlerts: true
