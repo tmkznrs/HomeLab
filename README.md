@@ -442,7 +442,8 @@ helm upgrade --install mimir grafana/mimir-distributed \
   -n observability \
   -f k8s/observability/07-mimir/values.yaml
 
-kubectl apply -f k8s/observability/07-mimir/prometheusrule.yaml
+kubectl apply -f k8s/observability/07-mimir/recording-rules.yaml
+kubectl apply -f k8s/observability/07-mimir/alert-rules.yaml
 kubectl apply -f k8s/observability/07-mimir/ingress.yaml
 ```
 

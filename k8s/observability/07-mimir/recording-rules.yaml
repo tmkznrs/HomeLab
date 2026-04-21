@@ -1,7 +1,7 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: mimir-rules
+  name: mimir-recording-rules
   namespace: observability
 spec:
   groups:
@@ -163,30 +163,3 @@ spec:
                 label_replace(kube_pod_info{job="prometheus.scrape.kube_state_metrics", node!=""}, "pod", "$1", "pod", "(.*)")
               )
             )
-
-    - name: node.alerts
-      rules:
-        - alert: NodeMemoryHigh
-          expr: |
-            (1 - (
-              node_memory_MemAvailable_bytes{job="integrations/unix"}
-              / node_memory_MemTotal_bytes{job="integrations/unix"}
-            )) * 100 > 80
-          for: 5m
-          labels:
-            severity: warning
-          annotations:
-            summary: "Node memory usage high: {{ $labels.instance }}"
-            description: "Memory usage is {{ $value | humanize }}% (threshold: 80%)"
-        - alert: NodeMemoryCritical
-          expr: |
-            (1 - (
-              node_memory_MemAvailable_bytes{job="integrations/unix"}
-              / node_memory_MemTotal_bytes{job="integrations/unix"}
-            )) * 100 > 90
-          for: 5m
-          labels:
-            severity: critical
-          annotations:
-            summary: "Node memory usage critical: {{ $labels.instance }}"
-            description: "Memory usage is {{ $value | humanize }}% (threshold: 90%)"
