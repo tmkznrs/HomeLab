@@ -3,11 +3,17 @@ kind: PrometheusRule
 metadata:
   name: mimir-recording-rules
   namespace: observability
+# kube-prometheus-stack が内包する Recording Rules をこのクラスタ向けに移植したもの。
+# Grafana の公式 Kubernetes ダッシュボードが前提とするメトリクス名を事前計算して生成する。
+# cAdvisor・kube-state-metrics・node-exporter は job ラベルが異なるため、それぞれ合わせて記述している。
 spec:
   groups:
+    # cAdvisor のコンテナリソースメトリクスに kube_pod_info から node ラベルを付与して保存する。
+    # cAdvisor 単体では node 名を持たないため join が必要。毎回クエリ時に join すると重いので事前計算する。
     - name: k8s.rules.container_resource
       interval: 2m
       rules:
+        # CPU 使用率（5m irate）に node ラベルを付与
         - record: node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate
           expr: |
             sum by (cluster, namespace, pod, container) (
@@ -15,24 +21,28 @@ spec:
             ) * on (cluster, namespace, pod) group_left(node) topk by (cluster, namespace, pod) (
               1, max by (cluster, namespace, pod, node) (kube_pod_info{node!=""})
             )
+        # メモリ working set（OOM kill の基準値。kubectl top や Headlamp が表示する値と同じ）
         - record: node_namespace_pod_container:container_memory_working_set_bytes
           expr: |
             container_memory_working_set_bytes{job="prometheus.scrape.cadvisor",image!=""}
             * on (cluster, namespace, pod) group_left(node) topk by (cluster, namespace, pod) (
               1, max by (cluster, namespace, pod, node) (kube_pod_info{node!=""})
             )
+        # RSS（実際に物理メモリに乗っているページ）
         - record: node_namespace_pod_container:container_memory_rss
           expr: |
             container_memory_rss{job="prometheus.scrape.cadvisor",image!=""}
             * on (cluster, namespace, pod) group_left(node) topk by (cluster, namespace, pod) (
               1, max by (cluster, namespace, pod, node) (kube_pod_info{node!=""})
             )
+        # ページキャッシュ（解放可能なメモリ。node_memory_MemAvailable_bytes に影響する）
         - record: node_namespace_pod_container:container_memory_cache
           expr: |
             container_memory_cache{job="prometheus.scrape.cadvisor",image!=""}
             * on (cluster, namespace, pod) group_left(node) topk by (cluster, namespace, pod) (
               1, max by (cluster, namespace, pod, node) (kube_pod_info{node!=""})
             )
+        # スワップ使用量
         - record: node_namespace_pod_container:container_memory_swap
           expr: |
             container_memory_swap{job="prometheus.scrape.cadvisor",image!=""}
@@ -40,9 +50,13 @@ spec:
               1, max by (cluster, namespace, pod, node) (kube_pod_info{node!=""})
             )
 
+    # Pod がどの Workload（Deployment/DaemonSet/StatefulSet/Job）に属するかを解決して保存する。
+    # kube-state-metrics は Pod の直接の owner（ReplicaSet）しか知らず、その親の Deployment は別途 join が必要。
+    # Grafana で Workload 単位の集計パネルを表示するために使われる。
     - name: k8s.rules.pod_owner
       interval: 2m
       rules:
+        # Deployment: Pod → ReplicaSet → Deployment の2段階 join で解決
         - record: namespace_workload_pod:kube_pod_owner:relabel
           expr: |
             max by (cluster, namespace, workload, pod) (
@@ -58,6 +72,7 @@ spec:
             )
           labels:
             workload_type: deployment
+        # DaemonSet/StatefulSet/Job: owner が直接 Workload なので1段階の label_replace で解決
         - record: namespace_workload_pod:kube_pod_owner:relabel
           expr: |
             max by (cluster, namespace, workload, pod) (
@@ -89,9 +104,12 @@ spec:
           labels:
             workload_type: job
 
+    # Running/Pending 状態の Pod に絞って CPU/メモリの requests・limits を集計する。
+    # 終了済み Pod の requests が合計に混入しないよう kube_pod_status_phase との乗算でフィルタする。
     - name: k8s.rules.resource_requests
       interval: 2m
       rules:
+        # アクティブな Pod の CPU/メモリ requests・limits（Pod 単位）
         - record: cluster:namespace:pod_cpu:active:kube_pod_container_resource_requests
           expr: |
             kube_pod_container_resource_requests{resource="cpu", job="prometheus.scrape.kube_state_metrics"}
@@ -116,6 +134,7 @@ spec:
             * on (namespace, pod, cluster) group_left() max by (namespace, pod, cluster) (
               (kube_pod_status_phase{phase=~"Pending|Running"} == 1)
             )
+        # namespace 単位の CPU/メモリ requests 合計（Grafana の namespace overview パネル用）
         - record: namespace_cpu:kube_pod_container_resource_requests:sum
           expr: |
             sum by (namespace, cluster) (
@@ -139,9 +158,13 @@ spec:
               )
             )
 
+    # ノード単位の CPU コア数・総メモリ量を集計する。
+    # node-exporter（job="integrations/unix"）のメトリクスに node_namespace_pod:kube_pod_info: を join して
+    # インスタンスIPではなくノード名でラベル付けする。
     - name: node.rules
       interval: 2m
       rules:
+        # ノードごとの CPU コア数（論理コア数を count で算出）
         - record: node:node_num_cpu:sum
           expr: |
             count by (cluster, node) (
@@ -150,12 +173,15 @@ spec:
                 topk by (namespace, pod, cluster) (1, node_namespace_pod:kube_pod_info:)
               )
             )
+        # ノードごとの総メモリ量
         - record: node:node_memory_bytes_total:sum
           expr: |
             sum by (node, cluster) (
               node_memory_MemTotal_bytes{job="integrations/unix"} * on (namespace, pod, cluster) group_left(node)
               topk by (namespace, pod, cluster) (1, node_namespace_pod:kube_pod_info:)
             )
+        # Pod → ノード のマッピングテーブル。node.rules 内の join キーとして使われる中間メトリクス。
+        # topk by で Pod あたり1レコードに正規化して多対1 join の曖昧さを防いでいる。
         - record: "node_namespace_pod:kube_pod_info:"
           expr: |
             topk by (namespace, pod, cluster) (1,
