@@ -1,0 +1,63 @@
+// Linux Alloy Configuration
+// Collects host OS metrics and journal logs, forwards to homelab Mimir/Loki.
+//
+// Prerequisites (run once as root):
+//   sudo bash scripts/11-install-host-alloy.sh
+//
+// Manual setup:
+//   1. Install homelab CA cert into system trust store:
+//        kubectl get secret homelab-ca-secret -n infra \
+//          -o jsonpath='{.data.tls\.crt}' | base64 -d \
+//          > /usr/local/share/ca-certificates/homelab-ca.crt
+//        update-ca-certificates
+//
+//   2. Add homelab.local to /etc/hosts:
+//        echo "10.10.0.100  homelab.local" >> /etc/hosts
+//
+//   3. Copy this file to /etc/alloy/config.alloy and restart:
+//        systemctl restart alloy
+
+// ── Host System Metrics → Mimir ──────────────────────────────────────────────
+prometheus.exporter.unix "host" {
+  enable_collectors = ["cpu", "meminfo", "filesystem", "netdev", "diskstats", "loadavg", "stat", "uname"]
+}
+
+prometheus.scrape "node_exporter" {
+  targets         = prometheus.exporter.unix.host.targets
+  scrape_interval = "60s"
+  forward_to      = [prometheus.relabel.host_labels.receiver]
+}
+
+prometheus.relabel "host_labels" {
+  forward_to = [prometheus.remote_write.mimir.receiver]
+
+  rule {
+    target_label = "job"
+    replacement  = "linux-host"
+  }
+  rule {
+    target_label = "instance"
+    replacement  = constants.hostname
+  }
+}
+
+prometheus.remote_write "mimir" {
+  endpoint {
+    url = "https://homelab.local/mimir/api/v1/push"
+  }
+}
+
+// ── Host Journal Logs → Loki ──────────────────────────────────────────────────
+loki.source.journal "host" {
+  forward_to = [loki.write.loki.receiver]
+  labels = {
+    job      = "linux-host-journal",
+    instance = constants.hostname,
+  }
+}
+
+loki.write "loki" {
+  endpoint {
+    url = "https://homelab.local/loki/api/v1/push"
+  }
+}
