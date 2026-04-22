@@ -29,7 +29,7 @@ server:
       cpu: 50m
       memory: 256Mi
     limits:
-      memory: 512Mi
+      memory: 1Gi
 
 worker:
   resources:
@@ -37,7 +37,7 @@ worker:
       cpu: 50m
       memory: 256Mi
     limits:
-      memory: 512Mi
+      memory: 1Gi
 
 postgresql:
   enabled: false
