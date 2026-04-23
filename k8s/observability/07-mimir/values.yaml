@@ -98,7 +98,7 @@ query_frontend:
       memory: 64Mi
     limits:
       cpu: 200m
-      memory: 128Mi
+      memory: 258Mi
   affinity:
     podAntiAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
