@@ -41,6 +41,56 @@ LXD コンテナ上に HA 構成の Kubernetes クラスターを構築し、obs
 | Authentik | https://homelab.local/authentik/ |
 | pgAdmin | https://homelab.local/pgadmin/ (Authentik OIDC) |
 
+### 外部 PC からの kubectl 管理
+
+LXD ブリッジ（10.10.0.0/24）は外部 PC から直接到達不可のため、LXD ホスト（192.168.1.101）経由で接続する。
+
+#### 1. CA 証明書を外部 PC に信頼させる
+
+```bash
+# LXD ホスト上で実行
+kubectl get secret homelab-ca-secret -n infra \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > homelab-ca.crt
+```
+
+取り出した `homelab-ca.crt` を外部 PC に転送してインポートする。
+
+| OS | コマンド |
+|---|---|
+| Ubuntu/Debian | `sudo cp homelab-ca.crt /usr/local/share/ca-certificates/ && sudo update-ca-certificates` |
+| macOS | `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain homelab-ca.crt` |
+| Windows | `certmgr.msc` →「信頼されたルート証明機関」にインポート |
+
+#### 2. kubeconfig を外部 PC にコピーして設定
+
+```bash
+# LXD ホスト上で実行
+kubectl config view --raw > kubeconfig-homelab.yaml
+
+# server を LXD ホストの LAN IP に変更
+kubectl config set-cluster kubernetes \
+  --server=https://192.168.1.101:6443 \
+  --kubeconfig=kubeconfig-homelab.yaml
+
+# TLS 検証ホスト名を kube-vip VIP に固定（接続先と証明書の CN が異なるため必須）
+kubectl config set-cluster kubernetes \
+  --tls-server-name=10.10.0.10 \
+  --kubeconfig=kubeconfig-homelab.yaml
+```
+
+外部 PC にコピーして配置：
+
+```bash
+mkdir -p ~/.kube
+cp kubeconfig-homelab.yaml ~/.kube/config
+```
+
+#### 3. 動作確認
+
+```bash
+kubectl get nodes -o wide
+```
+
 ---
 
 ## セットアップ手順
@@ -108,6 +158,10 @@ iptables -A FORWARD -p tcp -d 10.10.0.100 --dport 80 -j ACCEPT
 
 iptables -t nat -A PREROUTING -i enp1s0 -p tcp --dport 443 -j DNAT --to-destination 10.10.0.100:443
 iptables -A FORWARD -p tcp -d 10.10.0.100 --dport 443 -j ACCEPT
+
+# kubectl 用 API サーバー (kube-vip VIP: 10.10.0.10)
+iptables -t nat -A PREROUTING -i enp1s0 -p tcp --dport 6443 -j DNAT --to-destination 10.10.0.10:6443
+iptables -A FORWARD -p tcp -d 10.10.0.10 --dport 6443 -j ACCEPT
 
 netfilter-persistent save
 ```
