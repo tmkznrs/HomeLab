@@ -20,6 +20,7 @@
     },
     "mounts": [
         "source=${localEnv:HOME}${localEnv:USERPROFILE}/.claude,target=/home/vscode/.claude,type=bind",
+        "source=${localEnv:HOME}/.claude.json,target=/home/node/.claude.json,type=bind",
         "source=${localEnv:HOME}${localEnv:USERPROFILE}/.kube,target=/home/vscode/.kube,type=bind"
     ],
     "postCreateCommand": "bash .devcontainer/postcreate.sh"

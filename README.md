@@ -38,6 +38,7 @@ LXD コンテナ上に HA 構成の Kubernetes クラスターを構築し、obs
 | MinIO コンソール | https://homelab.local/minio-console/ (minio / minio12345 または Authentik OIDC) |
 | Hubble UI | https://homelab.local/hubble/ |
 | Headlamp | https://homelab.local/headlamp/ (Authentik OIDC) |
+| Argo CD | https://homelab.local/argocd/ (Authentik OIDC) |
 | Authentik | https://homelab.local/authentik/ |
 | pgAdmin | https://homelab.local/pgadmin/ (Authentik OIDC) |
 
@@ -302,6 +303,53 @@ kubectl create configmap homelab-ca \
 kubectl apply -f k8s/kube-system/coredns/configmap-patch.yaml
 kubectl apply -f k8s/operations/headlamp/ingress.yaml
 kubectl apply -f k8s/operations/headlamp/rbac.yaml
+```
+
+### Argo CD
+
+Authentik のセットアップ完了後に実行すること。
+
+#### Authentik アプリ作成（UI）
+
+1. Admin → Applications → Providers → OAuth2/OIDC Provider を作成
+   - Name: `argocd` / Client type: `Confidential`
+   - Redirect URIs: `https://homelab.local/argocd/auth/callback`
+   - Scopes: `authentik default OAuth Mapping - OpenID 'groups'` を追加
+2. Admin → Applications → Application を作成
+   - Slug: `argocd`、上記 Provider を紐付け
+3. クライアント ID・シークレットを控える
+
+#### インストール
+
+クライアントシークレットを `k8s/operations/argocd/oidc-secret.yaml` に記入し、クライアント ID を `k8s/operations/argocd/values.yaml` の `configs.cm.oidc.config.clientID` に記入してから実行する。
+
+```bash
+helm repo add argo https://argoproj.github.io/argo-helm
+helm repo update
+
+kubectl apply -f k8s/operations/argocd/oidc-secret.yaml
+
+helm upgrade --install argocd argo/argo-cd \
+  -n operations \
+  -f k8s/operations/argocd/values.yaml
+
+kubectl apply -f k8s/operations/argocd/ingress.yaml
+```
+
+初期 admin パスワードの確認：
+
+```bash
+kubectl -n operations get secret argocd-initial-admin-secret \
+  -o jsonpath="{.data.password}" | base64 -d
+```
+
+#### CLI ログイン
+
+```bash
+argocd login homelab.local \
+  --grpc-web \
+  --grpc-web-root-path /argocd \
+  --sso
 ```
 
 ### Authentik

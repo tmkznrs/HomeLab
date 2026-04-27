@@ -1,0 +1,36 @@
+global:
+  domain: homelab.local
+
+configs:
+  cm:
+    url: "https://homelab.local/argocd"
+    oidc.config: |
+      name: Authentik
+      issuer: https://homelab.local/authentik/application/o/argocd/
+      clientID: "jxqL9MvlGsI2RDwXCvVTthpWm3kODVWxzHEzGfCo"
+      clientSecret: $argocd-oidc-secret:clientSecret
+      requestedScopes:
+        - openid
+        - profile
+        - email
+        - groups
+      enableUserInfoGroups: true
+    oidc.tls.insecure.skip.verify: "true"
+
+  params:
+    server.insecure: "true"
+    server.basehref: "/argocd"
+    server.rootpath: "/argocd"
+
+  rbac:
+    policy.default: role:readonly
+    policy.csv: |
+      g, authentik Admins, role:admin
+    scopes: "[groups]"
+
+crds:
+  install: true
+  keep: true
+
+redis-ha:
+  enabled: false
