@@ -6,16 +6,14 @@ metadata:
   annotations:
     cert-manager.io/cluster-issuer: homelab-ca-issuer
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
 spec:
   ingressClassName: nginx
   rules:
     - host: homelab.local
       http:
         paths:
-          - path: /argocd(/|$)(.*)
-            pathType: ImplementationSpecific
+          - path: /argocd
+            pathType: Prefix
             backend:
               service:
                 name: argocd-server
