@@ -1,0 +1,11 @@
+configs:
+  params:
+    server.insecure: "true"
+    server.basehref: "/argocd"
+
+crds:
+  install: true
+  keep: true
+
+redis-ha:
+  enabled: false
