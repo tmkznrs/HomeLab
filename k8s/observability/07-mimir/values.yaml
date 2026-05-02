@@ -4,9 +4,9 @@ mimir:
       storage:
         backend: s3
         s3:
-          endpoint: minio.storage.svc
-          access_key_id: minio
-          secret_access_key: minio12345
+          endpoint: rook-ceph-rgw-my-store.rook-ceph.svc
+          access_key_id: ceph-obs-access
+          secret_access_key: ceph-obs-secret
           insecure: true
     blocks_storage:
       s3:
@@ -51,7 +51,7 @@ distributor:
 ingester:
   replicas: 2
   persistentVolume:
-    storageClass: local-path
+    storageClass: ceph-block
   zoneAwareReplication:
     enabled: false
     migration:
@@ -111,7 +111,7 @@ query_frontend:
 store_gateway:
   replicas: 2
   persistentVolume:
-    storageClass: local-path
+    storageClass: ceph-block
   zoneAwareReplication:
     enabled: false
   resources:
@@ -133,7 +133,7 @@ store_gateway:
 compactor:
   replicas: 1
   persistentVolume:
-    storageClass: local-path
+    storageClass: ceph-block
   resources:
     requests:
       cpu: 100m
@@ -146,7 +146,7 @@ alertmanager:
   enabled: true
   replicas: 1
   persistentVolume:
-    storageClass: local-path
+    storageClass: ceph-block
   resources:
     requests:
       cpu: 50m

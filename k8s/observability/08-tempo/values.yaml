@@ -10,9 +10,9 @@ storage:
     backend: s3
     s3:
       bucket: tempo-traces
-      endpoint: minio.storage.svc
-      access_key: minio
-      secret_key: minio12345
+      endpoint: rook-ceph-rgw-my-store.rook-ceph.svc
+      access_key: ceph-obs-access
+      secret_key: ceph-obs-secret
       insecure: true
 
 ingester:
@@ -20,7 +20,7 @@ ingester:
   config:
     replication_factor: 2
   persistentVolume:
-    storageClass: local-path
+    storageClass: ceph-block
   resources:
     requests:
       cpu: 50m

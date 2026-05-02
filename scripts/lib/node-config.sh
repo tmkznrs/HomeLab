@@ -8,6 +8,12 @@ declare -A NODE_ROLE=(
   [k8s-wk-1]=wk [k8s-wk-2]=wk [k8s-wk-3]=wk
 )
 
+# インスタンス種別 (container / vm)
+declare -A NODE_TYPE=(
+  [k8s-cp-1]=container [k8s-cp-2]=container [k8s-cp-3]=container
+  [k8s-wk-1]=vm [k8s-wk-2]=vm [k8s-wk-3]=vm
+)
+
 # 静的IPアドレス
 declare -A NODE_IP=(
   [k8s-cp-1]=10.10.0.11 [k8s-cp-2]=10.10.0.12 [k8s-cp-3]=10.10.0.13
@@ -23,11 +29,14 @@ declare -A NODE_MEM=(
 # ディスクサイズ
 declare -A NODE_DISK=(
   [k8s-cp-1]=50GiB [k8s-cp-2]=50GiB [k8s-cp-3]=50GiB
-  [k8s-wk-1]=250GiB [k8s-wk-2]=250GiB [k8s-wk-3]=250GiB
+  [k8s-wk-1]=50GiB [k8s-wk-2]=50GiB [k8s-wk-3]=50GiB
 )
 
 # vCPU数（全ノード共通）
 VCPU=2
+
+# Ceph OSD ディスクサイズ（ワーカーVM 1台あたり）
+OSD_DISK_SIZE=200G
 
 # 起動順序（コントロールプレーン → ワーカー）
 NODE_ORDER=(k8s-cp-1 k8s-cp-2 k8s-cp-3 k8s-wk-1 k8s-wk-2 k8s-wk-3)
@@ -35,6 +44,7 @@ NODE_ORDER=(k8s-cp-1 k8s-cp-2 k8s-cp-3 k8s-wk-1 k8s-wk-2 k8s-wk-3)
 # LXD設定
 IMAGE="ubuntu:24.04"
 PROFILE="k8s"
+VM_PROFILE="k8s-vm"
 
 # ネットワーク設定
 BRIDGE="lxdbr0"

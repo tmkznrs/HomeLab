@@ -16,6 +16,14 @@ echo "  → スワップを無効化..."
 swapoff -a
 [ -f /etc/fstab ] && sed -i '/\bswap\b/d' /etc/fstab || true
 
+echo "  → カーネルモジュールをロード・永続化..."
+cat > /etc/modules-load.d/k8s.conf << 'EOF'
+overlay
+br_netfilter
+EOF
+modprobe overlay 2>/dev/null || true
+modprobe br_netfilter 2>/dev/null || true
+
 echo "  → sysctl を設定..."
 cat > /etc/sysctl.d/99-k8s.conf << 'EOF'
 net.ipv4.ip_forward = 1
@@ -34,15 +42,6 @@ apt-get install -y -qq \
   apt-transport-https \
   ca-certificates \
   2>/dev/null
-
-echo "  → カーネルモジュールの確認..."
-for mod in overlay br_netfilter; do
-  if lsmod 2>/dev/null | grep -q "^${mod} "; then
-    echo "    [OK] $mod"
-  else
-    echo "    [WARN] $mod が見つかりません (ホストでのロードが必要)"
-  fi
-done
 
 echo "  → セットアップ完了"
 INNER_EOF

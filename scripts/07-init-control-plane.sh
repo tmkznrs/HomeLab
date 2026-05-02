@@ -68,8 +68,10 @@ networking:
   serviceSubnet: "${SERVICE_CIDR}"
 apiServer:
   extraArgs:
-    max-requests-inflight: "150"
-    max-mutating-requests-inflight: "50"
+    - name: max-requests-inflight
+      value: "150"
+    - name: max-mutating-requests-inflight
+      value: "50"
 EOF
 
 lxc exec "$FIRST_CP" -- kubeadm init \

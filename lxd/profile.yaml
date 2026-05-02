@@ -38,5 +38,5 @@ devices:
   root:
     path: /
     pool: default
-    size: 300GiB
+    size: 50GiB
     type: disk

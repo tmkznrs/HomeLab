@@ -1,0 +1,7 @@
+csi:
+  enableRbdDriver: true
+  enableCephfsDriver: false
+  enableGrpcMetrics: false
+
+toolbox:
+  enabled: true

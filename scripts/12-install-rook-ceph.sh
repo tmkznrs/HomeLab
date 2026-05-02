@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# 12-install-rook-ceph.sh — Rook-Ceph Operator + クラスターのインストール
+# 前提: ワーカーノードが VM として起動済み（OSD 用 /dev/vdb が存在すること）
+#       lsblk で確認: lxc exec k8s-wk-1 -- lsblk
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+echo "======================================================"
+echo "  Rook-Ceph インストール"
+echo "======================================================"
+echo ""
+
+# ────────────────────────────────────────────────────────────────────────────
+# Step 1: Helm リポジトリ追加
+# ────────────────────────────────────────────────────────────────────────────
+echo "[1/3] Helm リポジトリを追加します..."
+helm repo add rook-release https://charts.rook.io/release
+helm repo update
+echo "  [OK]"
+
+# ────────────────────────────────────────────────────────────────────────────
+# Step 2: Rook Operator をインストール
+# ────────────────────────────────────────────────────────────────────────────
+echo "[2/3] Rook Ceph Operator をインストールします..."
+helm upgrade --install rook-ceph rook-release/rook-ceph \
+  -n rook-ceph --create-namespace \
+  -f "$REPO_ROOT/k8s/storage/rook-ceph/operator-values.yaml" \
+  --wait
+echo "  [OK] Operator が起動しました"
+
+# ────────────────────────────────────────────────────────────────────────────
+# Step 3: CephCluster / CephBlockPool / StorageClass を適用
+# ────────────────────────────────────────────────────────────────────────────
+echo "[3/4] CephCluster / CephBlockPool / StorageClass / CephObjectStore を適用します..."
+kubectl apply -f "$REPO_ROOT/k8s/storage/rook-ceph/cluster.yaml"
+
+echo ""
+echo "  Ceph クラスターの初期化を待機中（最大10分）..."
+kubectl -n rook-ceph wait cephcluster rook-ceph \
+  --for=condition=Ready \
+  --timeout=600s
+
+echo ""
+echo "  Object Store (RGW) の起動を待機中（最大5分）..."
+kubectl -n rook-ceph wait cephobjectstore my-store \
+  --for=condition=Ready \
+  --timeout=300s
+
+# ────────────────────────────────────────────────────────────────────────────
+# Step 4: RGW ユーザーを作成（固定クレデンシャル）
+# ────────────────────────────────────────────────────────────────────────────
+echo "[4/4] RGW S3 ユーザー (observability) を作成します..."
+
+echo "  Toolbox Pod の起動を待機中..."
+kubectl -n rook-ceph rollout status deploy/rook-ceph-tools --timeout=120s
+
+kubectl -n rook-ceph exec deploy/rook-ceph-tools -- \
+  radosgw-admin user create \
+  --uid=observability \
+  --display-name="Observability Stack" \
+  --access-key=ceph-obs-access \
+  --secret-key=ceph-obs-secret 2>/dev/null \
+  || kubectl -n rook-ceph exec deploy/rook-ceph-tools -- \
+     radosgw-admin user modify \
+     --uid=observability \
+     --access-key=ceph-obs-access \
+     --secret-key=ceph-obs-secret
+
+echo "  [OK] RGW ユーザーが作成されました"
+echo "    Access Key : ceph-obs-access"
+echo "    Secret Key : ceph-obs-secret"
+echo "    Endpoint   : http://rook-ceph-rgw-my-store.rook-ceph.svc"
+
+echo ""
+echo "======================================================"
+echo "[OK] Rook-Ceph のインストールが完了しました"
+echo "======================================================"
+echo ""
+echo "次のステップ: Loki / Mimir / Tempo の Helm upgrade"
+echo "  helm upgrade loki grafana/loki -n observability -f k8s/observability/06-loki/values.yaml"
+echo "  helm upgrade mimir grafana/mimir-distributed -n observability -f k8s/observability/07-mimir/values.yaml"
+echo "  helm upgrade tempo grafana/tempo-distributed -n observability -f k8s/observability/08-tempo/values.yaml"
+echo ""
+echo "検証コマンド:"
+echo "  kubectl -n rook-ceph get cephcluster"
+echo "  kubectl -n rook-ceph get cephobjectstore"
+echo "  kubectl -n rook-ceph get pods"
+echo "  kubectl get storageclass ceph-block"
+echo ""
+echo "OSD デバイス名の確認（適用前に実施）:"
+echo "  lxc exec k8s-wk-1 -- lsblk"
+echo "  lxc exec k8s-wk-2 -- lsblk"
+echo "  lxc exec k8s-wk-3 -- lsblk"

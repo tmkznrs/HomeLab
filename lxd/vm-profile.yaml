@@ -1,0 +1,26 @@
+config:
+  # VM は自身のカーネルを持つため、privileged/nesting/raw.lxc は不要
+  # （コンテナと異なり /sys/fs/bpf はネイティブで利用可能、Cilium はそのまま動作する）
+
+  # ホスト側のブリッジ用モジュール（overlay は VM 内 OS が管理するため不要）
+  linux.kernel_modules: br_netfilter
+
+  # VM 内のスワップを無効化（k8s の必須要件）
+  limits.memory.swap: "false"
+  limits.memory.swap.priority: "0"
+
+  # Secure Boot を無効化（Ubuntu 24.04 VM との互換性確保）
+  security.secureboot: "false"
+
+description: Kubernetes ワーカーノード用 LXD VM プロファイル
+
+devices:
+  eth0:
+    name: eth0
+    network: lxdbr0
+    type: nic
+  root:
+    path: /
+    pool: default
+    size: 50GiB
+    type: disk

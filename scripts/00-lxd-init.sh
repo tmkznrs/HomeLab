@@ -18,37 +18,8 @@ fi
 
 echo "[INFO] LXD を初期化します (ブリッジ: $BRIDGE, サブネット: $BRIDGE_SUBNET)"
 
-lxd init --preseed <<EOF
-config:
-  core.https_address: ""
-networks:
-- name: ${BRIDGE}
-  type: bridge
-  config:
-    ipv4.address: ${BRIDGE_GW}/24
-    ipv4.nat: "true"
-    ipv6.address: none
-    ipv6.nat: "false"
-    dns.mode: managed
-storage_pools:
-- name: default
-  driver: zfs
-  config:
-    source: "/dev/nvme0n1p4"
-profiles:
-- name: default
-  devices:
-    eth0:
-      name: eth0
-      network: ${BRIDGE}
-      type: nic
-    root:
-      path: /
-      pool: default
-      type: disk
-projects: []
-cluster: null
-EOF
+lxd init --preseed < lxd/init.yaml
+
 
 echo "[OK] LXD 初期化完了"
 echo ""

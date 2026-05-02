@@ -201,6 +201,17 @@ kubectl get secret homelab-ca-secret -n infra \
 
 Windows: `certmgr.msc` →「信頼されたルート証明機関」にインポート
 
+### trust-manager
+
+cert-manager の直後に入れる。CA バンドルをクラスター全体の Pod に配布する。
+
+```bash
+helm upgrade --install trust-manager jetstack/trust-manager \
+  -n infra \
+  -f k8s/infra/trust-manager/values.yaml \
+  --wait
+```
+
 ### MetalLB
 
 ```bash

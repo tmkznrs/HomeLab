@@ -29,16 +29,16 @@ loki:
       ruler: loki-ruler
       admin: loki-admin
     s3:
-      endpoint: minio.storage.svc
-      accessKeyId: minio
-      secretAccessKey: minio12345
+      endpoint: rook-ceph-rgw-my-store.rook-ceph.svc
+      accessKeyId: ceph-obs-access
+      secretAccessKey: ceph-obs-secret
       s3ForcePathStyle: true
       insecure: true
 
 write:
   replicas: 2
   persistence:
-    storageClass: local-path
+    storageClass: ceph-block
   resources:
     requests:
       cpu: 50m
@@ -72,7 +72,7 @@ read:
 backend:
   replicas: 2
   persistence:
-    storageClass: local-path
+    storageClass: ceph-block
   resources:
     requests:
       cpu: 50m
