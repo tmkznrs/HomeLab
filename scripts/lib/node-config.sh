@@ -35,8 +35,11 @@ declare -A NODE_DISK=(
 # vCPU数（全ノード共通）
 VCPU=2
 
-# Ceph OSD ディスクサイズ（ワーカーVM 1台あたり）
-OSD_DISK_SIZE=200G
+# Ceph OSD ディスクサイズ（ワーカーVM 1台あたり、3台で計600GiB）
+OSD_DISK_SIZE="200GiB"
+
+# Ceph OSD 用 LXD ストレージプール（nvme0n1p4 上の LVM プール）
+OSD_POOL="osd"
 
 # 起動順序（コントロールプレーン → ワーカー）
 NODE_ORDER=(k8s-cp-1 k8s-cp-2 k8s-cp-3 k8s-wk-1 k8s-wk-2 k8s-wk-3)

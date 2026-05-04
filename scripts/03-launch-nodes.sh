@@ -35,11 +35,9 @@ for NODE in "${NODE_ORDER[@]}"; do
       --config limits.cpu="$VCPU" \
       --config limits.memory="$MEM" \
       --device root,size="$DISK"
-    # OSD ディスク: dir ドライバーはブロックボリューム非対応のため RAW ファイルで代替
-    OSD_IMG="/var/lib/lxd-osd/osd-${NODE}.img"
-    sudo mkdir -p /var/lib/lxd-osd && sudo chown "$(id -u):$(id -g)" /var/lib/lxd-osd
-    truncate -s "$OSD_DISK_SIZE" "$OSD_IMG"
-    lxc config device add "$NODE" osd disk source="$OSD_IMG"
+    # OSD ディスク: LXD LVM プールからブロックボリュームを作成して接続
+    lxc storage volume create "$OSD_POOL" "osd-${NODE}" --type=block size="$OSD_DISK_SIZE"
+    lxc config device add "$NODE" osd disk pool="$OSD_POOL" source="osd-${NODE}"
   else
     # コンテナとして起動
     lxc launch "$IMAGE" "$NODE" \

@@ -22,6 +22,9 @@ extraConfigmapMounts:
     configMap: pgadmin-config
     readOnly: true
 
+strategy:
+  type: Recreate
+
 resources:
   requests:
     cpu: 50m

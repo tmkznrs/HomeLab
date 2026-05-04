@@ -15,7 +15,7 @@ LXD コンテナ上に HA 構成の Kubernetes クラスターを構築し、obs
 | HA | kube-vip (ARP モード) |
 | ロードバランサー | MetalLB (10.10.0.100) |
 | Ingress | ingress-nginx |
-| ストレージ | local-path-provisioner + MinIO |
+| ストレージ | local-path-provisioner + Rook-Ceph (ceph-block) + MinIO (Rook-Ceph RGW) |
 
 ### ノード一覧
 
@@ -35,7 +35,7 @@ LXD コンテナ上に HA 構成の Kubernetes クラスターを構築し、obs
 | サービス | URL |
 |---|---|
 | Grafana | https://homelab.local/grafana/ (admin / admin) |
-| MinIO コンソール | https://homelab.local/minio-console/ (minio / minio12345 または Authentik OIDC) |
+| Rook-Ceph | https://homelab.local/ceph/ (admin / admin) |
 | Hubble UI | https://homelab.local/hubble/ |
 | Headlamp | https://homelab.local/headlamp/ (Authentik OIDC) |
 | Argo CD | https://homelab.local/argocd/ (Authentik OIDC) |
@@ -169,7 +169,7 @@ netfilter-persistent save
 
 ---
 
-## インフラコンポーネント
+## 各コンポーネントのインストール
 
 ### Namespace
 
@@ -231,18 +231,6 @@ helm install ingress-nginx ingress-nginx/ingress-nginx \
   -f k8s/infra/ingress-nginx/values.yaml
 ```
 
-### Hubble UI (Cilium の観測 UI)
-
-Cilium インストール後に実行。
-
-```bash
-# values.yaml に hubble.relay.enabled / hubble.ui.enabled を追加済み
-helm upgrade cilium cilium/cilium \
-  -n kube-system \
-  -f k8s/kube-system/cilium/values.yaml
-
-kubectl apply -f k8s/kube-system/cilium/ingress-hubble.yaml
-```
 
 ### metrics-server
 
@@ -252,6 +240,174 @@ helm repo update
 helm install metrics-server metrics-server/metrics-server \
   -n kube-system \
   -f k8s/kube-system/metrics-server/values.yaml
+```
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+### Rook-Ceph
+
+#### Helm リポジトリ追加
+```bash
+helm repo add rook-release https://charts.rook.io/release
+helm repo update
+```
+
+#### Rook Operator をインストール
+```bash
+helm upgrade --install rook-ceph rook-release/rook-ceph \
+  -n rook-ceph --create-namespace \
+  -f "$REPO_ROOT/k8s/storage/rook-ceph/operator-values.yaml" \
+  --wait
+```
+
+#### CephCluster / CephBlockPool / StorageClass を適用
+```bash
+kubectl apply -f "$REPO_ROOT/k8s/storage/rook-ceph/cluster.yaml"
+kubectl -n rook-ceph wait cephcluster rook-ceph \
+  --for=condition=Ready \
+  --timeout=900s
+kubectl -n rook-ceph wait cephobjectstore my-store \
+  --for=condition=Ready \
+  --timeout=600s
+```
+
+#### Toolbox のデプロイ + RGW ユーザーを作成（固定クレデンシャル）
+```bash
+helm template rook-ceph-cluster rook-release/rook-ceph-cluster \
+  -n rook-ceph \
+  --set operatorNamespace=rook-ceph \
+  --set clusterName=rook-ceph \
+  --set toolbox.enabled=true \
+  -s templates/deployment.yaml \
+  | kubectl apply -f -
+
+kubectl -n rook-ceph rollout status deploy/rook-ceph-tools --timeout=120s
+
+kubectl -n rook-ceph exec deploy/rook-ceph-tools -- \
+  radosgw-admin user create \
+  --uid=observability \
+  --display-name="Observability Stack" \
+  --access-key=ceph-obs-access \
+  --secret-key=ceph-obs-secret \
+  --rgw-realm=my-store \
+  --rgw-zonegroup=my-store \
+  --rgw-zone=my-store 2>/dev/null \
+  || kubectl -n rook-ceph exec deploy/rook-ceph-tools -- \
+     radosgw-admin user modify \
+     --uid=observability \
+     --access-key=ceph-obs-access \
+     --secret-key=ceph-obs-secret \
+     --rgw-realm=my-store \
+     --rgw-zonegroup=my-store \
+     --rgw-zone=my-store
+
+# S3 バケットを作成（Loki/Mimir/Tempo 用）
+kubectl -n rook-ceph exec deploy/rook-ceph-tools -- python3 -c "
+import urllib.request, urllib.error, hmac, hashlib, datetime
+
+endpoint = 'http://rook-ceph-rgw-my-store.rook-ceph.svc'
+access_key = 'ceph-obs-access'
+secret_key = 'ceph-obs-secret'
+
+def sign(key, msg):
+    return hmac.new(key, msg.encode('utf-8'), hashlib.sha256).digest()
+
+def get_signature(key, date_stamp, region, service, msg):
+    k_date = sign(('AWS4' + key).encode('utf-8'), date_stamp)
+    k_region = sign(k_date, region)
+    k_service = sign(k_region, service)
+    k_signing = sign(k_service, 'aws4_request')
+    return hmac.new(k_signing, msg.encode('utf-8'), hashlib.sha256).hexdigest()
+
+buckets = ['loki-chunks', 'loki-ruler', 'loki-admin', 'mimir-blocks', 'mimir-ruler', 'mimir-alertmanager', 'tempo-traces']
+now = datetime.datetime.utcnow()
+amz_date = now.strftime('%Y%m%dT%H%M%SZ')
+date_stamp = now.strftime('%Y%m%d')
+region, service = 'us-east-1', 's3'
+
+for bucket in buckets:
+    payload_hash = hashlib.sha256(b'').hexdigest()
+    canonical_headers = f'host:rook-ceph-rgw-my-store.rook-ceph.svc\nx-amz-content-sha256:{payload_hash}\nx-amz-date:{amz_date}\n'
+    signed_headers = 'host;x-amz-content-sha256;x-amz-date'
+    canonical_request = f'PUT\n/{bucket}\n\n{canonical_headers}\n{signed_headers}\n{payload_hash}'
+    credential_scope = f'{date_stamp}/{region}/{service}/aws4_request'
+    string_to_sign = f'AWS4-HMAC-SHA256\n{amz_date}\n{credential_scope}\n{hashlib.sha256(canonical_request.encode()).hexdigest()}'
+    signature = get_signature(secret_key, date_stamp, region, service, string_to_sign)
+    auth_header = f'AWS4-HMAC-SHA256 Credential={access_key}/{credential_scope}, SignedHeaders={signed_headers}, Signature={signature}'
+    req = urllib.request.Request(f'{endpoint}/{bucket}', data=b'', method='PUT')
+    req.add_header('Authorization', auth_header)
+    req.add_header('x-amz-date', amz_date)
+    req.add_header('x-amz-content-sha256', payload_hash)
+    try:
+        resp = urllib.request.urlopen(req)
+        print(f'{bucket}: {resp.status}')
+    except urllib.error.HTTPError as e:
+        print(f'{bucket}: {e.code} {e.read().decode()}')
+"
+```
+
+### PostgreSQL (CloudNativePG)
+
+Grafana・Authentik のバックエンド DB。
+
+```bash
+helm repo add cnpg                 https://cloudnative-pg.github.io/charts
+helm upgrade --install cnpg cnpg/cloudnative-pg \
+  -n database --create-namespace \
+  -f k8s/database/postgres/cnpg-operator-values.yaml \
+  --wait --timeout=120s
+
+kubectl apply -f k8s/database/postgres/secret.yaml
+kubectl apply -f k8s/database/postgres/cluster.yaml
+
+kubectl wait cluster/postgres-cluster -n database \
+  --for=condition=Ready --timeout=300s
+
+kubectl -n database exec postgres-cluster-1 -- psql -U postgres -c "CREATE USER authentik WITH PASSWORD 'authentik12345';" 2>&1
+kubectl -n database exec postgres-cluster-1 -- psql -U postgres -c "CREATE DATABASE authentik OWNER authentik;" 2>&1
+```
+
+### Authentik
+
+cert-manager・PostgreSQL インストール後に実行すること。
+Authentik の DB は既存の `postgres-cluster`（database namespace）を流用する。
+
+```bash
+# Authentik 用 DB・ユーザーを既存 postgres-cluster に作成
+PRIMARY=$(kubectl get cluster postgres-cluster -n database -o jsonpath='{.status.currentPrimary}')
+kubectl exec -n database $PRIMARY -- psql -U postgres -c "CREATE USER authentik WITH PASSWORD 'authentik12345';"
+kubectl exec -n database $PRIMARY -- psql -U postgres -c "CREATE DATABASE authentik OWNER authentik;"
+
+# Authentik インストール
+helm repo add authentik https://charts.goauthentik.io
+helm repo update
+helm upgrade --install authentik authentik/authentik \
+  -n infra \
+  -f k8s/infra/authentik/values.yaml \
+  --wait --timeout=300s
+
+kubectl apply -f k8s/infra/authentik/ingress.yaml
+```
+
+### pgAdmin
+
+Authentik で OAuth2/OIDC Provider・Application `pgadmin` を事前作成し、Client ID/Secret を `k8s/database/pgadmin/oauth2-secret.yaml` に記載してから実行する。
+Redirect URI: `https://homelab.local/pgadmin/oauth2/authorize`
+
+```bash
+helm repo add runix https://helm.runix.net
+helm repo update
+
+kubectl apply -f k8s/database/pgadmin/config-configmap.yaml
+kubectl apply -f k8s/database/pgadmin/oauth2-secret.yaml
+
+helm upgrade --install pgadmin runix/pgadmin4 \
+  -n database \
+  -f k8s/database/pgadmin/values.yaml \
+  --wait
+
+kubectl apply -f k8s/database/pgadmin/ingress.yaml
 ```
 
 ### Headlamp
@@ -287,6 +443,7 @@ for node in k8s-cp-1 k8s-cp-2 k8s-cp-3; do
 done
 
 # kube-apiserver に OIDC フラグを追加（各 CP ノードの manifest を編集）
+# <CLIENT_ID>を実際のクライアントIDに書き換えて実行すること
 for node in k8s-cp-1 k8s-cp-2 k8s-cp-3; do
   lxc exec $node -- sed -i '/--tls-cert-file/a\    - --oidc-issuer-url=https://homelab.local/authentik/application/o/headlamp/\n    - --oidc-client-id=<CLIENT_ID>\n    - --oidc-username-claim=preferred_username\n    - --oidc-groups-claim=groups\n    - --oidc-ca-file=/etc/kubernetes/pki/homelab-ca.crt' \
     /etc/kubernetes/manifests/kube-apiserver.yaml
@@ -315,6 +472,20 @@ kubectl apply -f k8s/kube-system/coredns/configmap-patch.yaml
 kubectl apply -f k8s/operations/headlamp/ingress.yaml
 kubectl apply -f k8s/operations/headlamp/rbac.yaml
 ```
+
+### Hubble UI (Cilium の観測 UI)
+
+Cilium インストール後に実行。
+
+```bash
+# values.yaml に hubble.relay.enabled / hubble.ui.enabled を追加済み
+helm upgrade cilium cilium/cilium \
+  -n kube-system \
+  -f k8s/kube-system/cilium/values.yaml
+
+kubectl apply -f k8s/kube-system/cilium/ingress-hubble.yaml
+```
+
 
 ### Argo CD
 
@@ -363,27 +534,7 @@ argocd login homelab.local \
   --sso
 ```
 
-### Authentik
 
-cert-manager・PostgreSQL インストール後に実行すること。
-Authentik の DB は既存の `postgres-cluster`（database namespace）を流用する。
-
-```bash
-# Authentik 用 DB・ユーザーを既存 postgres-cluster に作成
-PRIMARY=$(kubectl get cluster postgres-cluster -n database -o jsonpath='{.status.currentPrimary}')
-kubectl exec -n database $PRIMARY -- psql -U postgres -c "CREATE USER authentik WITH PASSWORD 'authentik12345';"
-kubectl exec -n database $PRIMARY -- psql -U postgres -c "CREATE DATABASE authentik OWNER authentik;"
-
-# Authentik インストール
-helm repo add authentik https://charts.goauthentik.io
-helm repo update
-helm upgrade --install authentik authentik/authentik \
-  -n infra \
-  -f k8s/infra/authentik/values.yaml \
-  --wait --timeout=300s
-
-kubectl apply -f k8s/infra/authentik/ingress.yaml
-```
 
 初回セットアップ（UI）：
 1. `https://homelab.local/authentik/if/flow/initial-setup/` にアクセスして管理者パスワードを設定
@@ -399,132 +550,36 @@ kubectl apply -f k8s/infra/authentik/grafana-oauth-secret.yaml
 ```
 
 ---
-
-## ストレージ
-
-### local-path-provisioner
-
-```bash
-kubectl apply -f k8s/storage/local-path-provisioner/local-path-storage.yaml
-```
-
-`StorageClass` 名: `local-path` / デフォルトではない（PVC で明示指定が必要）。
-
-### MinIO Operator + Tenant
-
-```bash
-helm repo add minio-operator https://operator.min.io/
-helm repo update
-
-helm upgrade --install minio-operator minio-operator/operator \
-  -n storage --create-namespace \
-  -f k8s/storage/minio/operator-values.yaml
-
-helm upgrade --install minio-tenant minio-operator/tenant \
-  -n storage \
-  -f k8s/storage/minio/tenant-values.yaml
-```
-
-Tenant 仕様: 3 servers × 2 volumes × 50 GiB、サービス名 `minio.storage.svc`
-
-#### MinIO OIDC 設定（Authentik）
-
-Authentik Admin UI で以下を行う。
-
-1. **Scope Mapping 作成**: Customization → Property Mappings → Create → Scope Mapping
-   - Name: `MinIO Policy`
-   - Scope name: `minio_policy`
-   - Expression:
-     ```python
-     return {"policy": "consoleAdmin"}
-     ```
-
-2. **Provider 作成**: Applications → Providers → OAuth2/OIDC Provider
-   - Name: `minio` / Client type: `Confidential`
-   - Redirect URIs: `https://homelab.local/minio-console/oauth_callback`
-   - Scopes: 上記 `MinIO Policy` を追加
-
-3. **Application 作成**: Applications → Applications
-   - Slug: `minio` / Provider: 上記 / Launch URL: `https://homelab.local/minio-console/`
-
-4. クライアント ID・シークレットを `k8s/storage/minio/tenant-values.yaml` の `env` セクションに記入して apply
-
-```bash
-# homelab-ca ConfigMap を storage namespace にコピー
-kubectl get configmap homelab-ca -n operations -o yaml \
-  | sed 's/namespace: operations/namespace: storage/' \
-  | kubectl apply -f -
-
-helm upgrade minio-tenant minio-operator/tenant -n storage -f k8s/storage/minio/tenant-values.yaml
-```
-
-> **注意**: MinIO Operator sidecar (v7.0.1) は `valueFrom.secretKeyRef` を解決しないバグがあるため、
-> クライアントシークレットは `value:` で直接指定する（[#2279](https://github.com/minio/operator/issues/2279)）。
-
-### MinIO コンソール Ingress
-
-`configuration-snippet` を使うため ingress-nginx のアップグレードが先に必要。
-
-```bash
-helm upgrade ingress-nginx ingress-nginx/ingress-nginx \
-  -n infra \
-  -f k8s/infra/ingress-nginx/values.yaml
-
-kubectl apply -f k8s/storage/minio/ingress.yaml
-```
-
----
-
-## Observability スタック
+## Observability スタックのインストール
 
 ### 前提: Helm リポジトリ追加
 
 ```bash
 helm repo add grafana              https://grafana.github.io/helm-charts
-helm repo add cnpg                 https://cloudnative-pg.github.io/charts
 helm repo add grafana-community    https://grafana-community.github.io/helm-charts
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo update
 ```
 
-### 1. PostgreSQL (CloudNativePG)
+### Grafana Operator + Grafana
 
-Grafana・Authentik のバックエンド DB。
+#### Authentik アプリ作成（UI）
 
-```bash
-helm upgrade --install cnpg cnpg/cloudnative-pg \
-  -n database --create-namespace \
-  -f k8s/database/postgres/cnpg-operator-values.yaml \
-  --wait --timeout=120s
+https://homelab.local/authentik/ にアクセスして以下を実施：
 
-kubectl apply -f k8s/database/postgres/secret.yaml
-kubectl apply -f k8s/database/postgres/cluster.yaml
+1. Admin → Applications → Providers → Create → OAuth2/OIDC Provider
+Name: grafana
+Client type: Confidential
+Redirect URIs: https://homelab.local/grafana/login/generic_oauth
+2. Admin → Applications → Applications → Create
+Slug: grafana
+上記 Provider を紐付け
+Launch URL: https://homelab.local/grafana/
+3. 作成した Provider のクライアント ID・シークレットを
+   k8s/observability/05-grafana/grafana.yamlの
+   `auth.generic_oauth.client_id` / `client_secret` に直接書き込む
 
-kubectl wait cluster/postgres-cluster -n database \
-  --for=condition=Ready --timeout=300s
-```
-
-### 2. pgAdmin
-
-Authentik で OAuth2/OIDC Provider・Application `pgadmin` を事前作成し、Client ID/Secret を `k8s/database/pgadmin/oauth2-secret.yaml` に記載してから実行する。
-Redirect URI: `https://homelab.local/pgadmin/oauth2/authorize`
-
-```bash
-helm repo add runix https://helm.runix.net
-helm repo update
-
-kubectl apply -f k8s/database/pgadmin/config-configmap.yaml
-kubectl apply -f k8s/database/pgadmin/oauth2-secret.yaml
-
-helm upgrade --install pgadmin runix/pgadmin4 \
-  -n database \
-  -f k8s/database/pgadmin/values.yaml \
-  --wait
-
-kubectl apply -f k8s/database/pgadmin/ingress.yaml
-```
-
-### 4. Grafana Operator + Grafana
+#### Grafanaのインストール
 
 ```bash
 helm upgrade --install grafana-operator \
@@ -538,7 +593,7 @@ kubectl apply -f k8s/observability/05-grafana/grafana.yaml
 kubectl apply -f k8s/observability/05-grafana/ingress.yaml
 ```
 
-### 5. Loki
+### Loki
 
 ```bash
 helm upgrade --install loki grafana/loki \
@@ -548,7 +603,7 @@ helm upgrade --install loki grafana/loki \
 kubectl apply -f k8s/observability/06-loki/ingress.yaml
 ```
 
-### 6. Mimir
+### Mimir
 
 ```bash
 helm upgrade --install mimir grafana/mimir-distributed \
@@ -560,7 +615,7 @@ kubectl apply -f k8s/observability/07-mimir/alert-rules.yaml
 kubectl apply -f k8s/observability/07-mimir/ingress.yaml
 ```
 
-`prometheusrule.yaml` には recording rules と以下のアラートルールが含まれる。
+`recording-rules.yaml` には recording rules、`alert-rules.yaml` には以下のアラートルールが含まれる。
 
 | アラート | 条件 | 重大度 |
 |---|---|---|
@@ -569,7 +624,7 @@ kubectl apply -f k8s/observability/07-mimir/ingress.yaml
 
 Alertmanager は `values.yaml` の `alertmanager.fallbackConfig` に Gmail SMTP 設定を持ち、アラート発火時に `tmkznrs@gmail.com` へメール通知する。PrometheusRule は Alloy の `mimir.rules.kubernetes` コンポーネントが Mimir へ自動同期する。
 
-### 7. Tempo
+### Tempo
 
 ```bash
 helm upgrade --install tempo grafana-community/tempo-distributed \
@@ -579,7 +634,7 @@ helm upgrade --install tempo grafana-community/tempo-distributed \
 kubectl apply -f k8s/observability/08-tempo/ingress.yaml
 ```
 
-### 8. kube-state-metrics
+### kube-state-metrics
 
 ```bash
 helm upgrade --install kube-state-metrics prometheus-community/kube-state-metrics \
@@ -587,7 +642,7 @@ helm upgrade --install kube-state-metrics prometheus-community/kube-state-metric
   -f k8s/observability/10-kube-state-metrics/values.yaml
 ```
 
-### 9. Alloy
+### Alloy
 
 ```bash
 helm upgrade --install alloy grafana/alloy \
@@ -598,16 +653,15 @@ kubectl apply -f k8s/observability/09-alloy/service.yaml
 kubectl apply -f k8s/observability/09-alloy/ingress.yaml
 ```
 
-### 10. データソース・ダッシュボード
+### データソース
 
 ```bash
 kubectl apply -f k8s/observability/05-grafana/datasource-loki.yaml
 kubectl apply -f k8s/observability/05-grafana/datasource-mimir.yaml
 kubectl apply -f k8s/observability/05-grafana/datasource-tempo.yaml
-kubectl apply -f k8s/observability/05-grafana/dashboards/
 ```
 
-### 11. alloy-probe (外部マシン ICMP 死活監視)
+### alloy-probe (外部マシン ICMP 死活監視)
 
 クラスター側の単一レプリカ Alloy Deployment から外部マシンへ ICMP プローブを送信する。
 Windows Alloy など外部エージェントが停止した場合でも監視が継続される。
@@ -636,12 +690,10 @@ kubectl apply -f k8s/observability/10-alloy-probe/deployment.yaml
 
 ## 各コンポーネントの管理画面パス
 
-Ingressは未設定のため、kubectl port-forwardを実行してアクセスする。
-
 ### Mimir
-Ingressは未設定のため、kubectl port-forwardを実行してアクセスする。
+Ingress 未設定のため、kubectl port-forward でアクセスする。
 ```bash
-kubectl port-forward -n observability svc/mimir-querier 8080:8080 
+kubectl port-forward -n observability svc/mimir-querier 8080:8080
 ```
 
 ### Loki

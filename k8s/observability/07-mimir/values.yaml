@@ -29,16 +29,18 @@ mimir:
     limits:
       compactor_blocks_retention_period: 168h
       out_of_order_time_window: 10m
+      ingestion_rate: 100000
+      ingestion_burst_size: 1000000
 
 distributor:
   replicas: 2
   resources:
     requests:
-      cpu: 100m
-      memory: 128Mi
-    limits:
-      cpu: 200m
+      cpu: 10m
       memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
   affinity:
     podAntiAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -58,10 +60,10 @@ ingester:
       replicas: 0
   resources:
     requests:
-      cpu: 100m
+      cpu: 10m
       memory: 512Mi
     limits:
-      cpu: 500m
+      cpu: 1000m
       memory: 1Gi
   affinity:
     podAntiAffinity:
@@ -76,10 +78,10 @@ querier:
   replicas: 2
   resources:
     requests:
-      cpu: 100m
+      cpu: 10m
       memory: 128Mi
     limits:
-      cpu: 300m
+      cpu: 500m
       memory: 256Mi
   affinity:
     podAntiAffinity:
@@ -94,7 +96,7 @@ query_frontend:
   replicas: 2
   resources:
     requests:
-      cpu: 50m
+      cpu: 10m
       memory: 64Mi
     limits:
       cpu: 200m
@@ -116,10 +118,10 @@ store_gateway:
     enabled: false
   resources:
     requests:
-      cpu: 100m
+      cpu: 10m
       memory: 128Mi
     limits:
-      cpu: 200m
+      cpu: 500m
       memory: 256Mi
   affinity:
     podAntiAffinity:
@@ -136,10 +138,10 @@ compactor:
     storageClass: ceph-block
   resources:
     requests:
-      cpu: 100m
+      cpu: 10m
       memory: 128Mi
     limits:
-      cpu: 300m
+      cpu: 500m
       memory: 256Mi
 
 alertmanager:
@@ -149,7 +151,7 @@ alertmanager:
     storageClass: ceph-block
   resources:
     requests:
-      cpu: 50m
+      cpu: 10m
       memory: 128Mi
     limits:
       cpu: 200m
@@ -177,7 +179,7 @@ ruler:
   replicas: 2
   resources:
     requests:
-      cpu: 50m
+      cpu: 10m
       memory: 128Mi
     limits:
       cpu: 200m

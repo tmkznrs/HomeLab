@@ -23,50 +23,50 @@ ingester:
     storageClass: ceph-block
   resources:
     requests:
-      cpu: 50m
+      cpu: 10m
       memory: 128Mi
     limits:
-      cpu: 300m
+      cpu: 10m
       memory: 256Mi
 
 distributor:
   replicas: 2
   resources:
     requests:
-      cpu: 50m
+      cpu: 10m
       memory: 64Mi
     limits:
-      cpu: 200m
+      cpu: 10m
       memory: 128Mi
 
 compactor:
   replicas: 1
   resources:
     requests:
-      cpu: 50m
+      cpu: 10m
       memory: 64Mi
     limits:
-      cpu: 200m
+      cpu: 10m
       memory: 128Mi
 
 querier:
   replicas: 2
   resources:
     requests:
-      cpu: 50m
+      cpu: 10m
       memory: 64Mi
     limits:
-      cpu: 200m
+      cpu: 10m
       memory: 128Mi
 
 queryFrontend:
   replicas: 2
   resources:
     requests:
-      cpu: 50m
+      cpu: 10m
       memory: 64Mi
     limits:
-      cpu: 200m
+      cpu: 10m
       memory: 128Mi
 
 memcached:

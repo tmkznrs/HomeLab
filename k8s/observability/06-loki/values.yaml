@@ -41,7 +41,7 @@ write:
     storageClass: ceph-block
   resources:
     requests:
-      cpu: 50m
+      cpu: 10m
       memory: 128Mi
     limits:
       memory: 256Mi
@@ -57,7 +57,7 @@ read:
   replicas: 2
   resources:
     requests:
-      cpu: 50m
+      cpu: 10m
       memory: 128Mi
     limits:
       memory: 256Mi
@@ -75,7 +75,7 @@ backend:
     storageClass: ceph-block
   resources:
     requests:
-      cpu: 50m
+      cpu: 10m
       memory: 128Mi
     limits:
       memory: 256Mi
@@ -94,7 +94,7 @@ chunksCache:
   enabled: false
   resources:
     requests:
-      cpu: 100m
+      cpu: 10m
       memory: 256Mi
     limits:
       memory: 512Mi
@@ -104,7 +104,7 @@ resultsCache:
   enabled: false
   resources:
     requests:
-      cpu: 100m
+      cpu: 10m
       memory: 128Mi
     limits:
       memory: 256Mi
