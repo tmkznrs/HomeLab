@@ -48,6 +48,9 @@ prometheus.relabel "windows_labels" {
 prometheus.remote_write "mimir" {
   endpoint {
     url = "https://homelab.local/mimir/api/v1/push"
+    tls_config {
+      ca_file = "C:/ProgramData/GrafanaLabs/Alloy/homelab-ca.crt"
+    }
   }
 }
 
@@ -89,5 +92,8 @@ loki.source.windowsevent "security" {
 loki.write "loki" {
   endpoint {
     url = "https://homelab.local/loki/api/v1/push"
+    tls_config {
+      ca_file = "C:/ProgramData/GrafanaLabs/Alloy/homelab-ca.crt"
+    }
   }
 }
