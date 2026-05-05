@@ -29,7 +29,7 @@ loki:
       ruler: loki-ruler
       admin: loki-admin
     s3:
-      endpoint: rook-ceph-rgw-my-store.rook-ceph.svc
+      endpoint: rook-ceph-rgw-my-store.storage.svc
       accessKeyId: ceph-obs-access
       secretAccessKey: ceph-obs-secret
       s3ForcePathStyle: true

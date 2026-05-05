@@ -10,7 +10,7 @@ storage:
     backend: s3
     s3:
       bucket: tempo-traces
-      endpoint: rook-ceph-rgw-my-store.rook-ceph.svc
+      endpoint: rook-ceph-rgw-my-store.storage.svc
       access_key: ceph-obs-access
       secret_key: ceph-obs-secret
       insecure: true

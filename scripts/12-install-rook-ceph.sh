@@ -26,7 +26,7 @@ echo "  [OK]"
 # ────────────────────────────────────────────────────────────────────────────
 echo "[2/4] Rook Ceph Operator をインストールします..."
 helm upgrade --install rook-ceph rook-release/rook-ceph \
-  -n rook-ceph --create-namespace \
+  -n storage --create-namespace \
   -f "$REPO_ROOT/k8s/storage/rook-ceph/operator-values.yaml" \
   --wait
 echo "  [OK] Operator が起動しました"
@@ -39,13 +39,13 @@ kubectl apply -f "$REPO_ROOT/k8s/storage/rook-ceph/cluster.yaml"
 
 echo ""
 echo "  Ceph クラスターの初期化を待機中（最大15分）..."
-kubectl -n rook-ceph wait cephcluster rook-ceph \
+kubectl -n storage wait cephcluster rook-ceph \
   --for=condition=Ready \
   --timeout=900s
 
 echo ""
 echo "  Object Store (RGW) の起動を待機中（最大10分）..."
-kubectl -n rook-ceph wait cephobjectstore my-store \
+kubectl -n storage wait cephobjectstore my-store \
   --for=condition=Ready \
   --timeout=600s
 
@@ -56,23 +56,23 @@ kubectl -n rook-ceph wait cephobjectstore my-store \
 # rook-ceph-cluster chart の templates/deployment.yaml から別途 apply する
 echo "[4/4] Toolbox をデプロイします..."
 helm template rook-ceph-cluster rook-release/rook-ceph-cluster \
-  -n rook-ceph \
-  --set operatorNamespace=rook-ceph \
+  -n storage \
+  --set operatorNamespace=storage \
   --set clusterName=rook-ceph \
   --set toolbox.enabled=true \
   -s templates/deployment.yaml \
   | kubectl apply -f -
 
 echo "  Toolbox Pod の起動を待機中..."
-kubectl -n rook-ceph rollout status deploy/rook-ceph-tools --timeout=120s
+kubectl -n storage rollout status deploy/rook-ceph-tools --timeout=120s
 
-kubectl -n rook-ceph exec deploy/rook-ceph-tools -- \
+kubectl -n storage exec deploy/rook-ceph-tools -- \
   radosgw-admin user create \
   --uid=observability \
   --display-name="Observability Stack" \
   --access-key=ceph-obs-access \
   --secret-key=ceph-obs-secret 2>/dev/null \
-  || kubectl -n rook-ceph exec deploy/rook-ceph-tools -- \
+  || kubectl -n storage exec deploy/rook-ceph-tools -- \
      radosgw-admin user modify \
      --uid=observability \
      --access-key=ceph-obs-access \
@@ -81,7 +81,7 @@ kubectl -n rook-ceph exec deploy/rook-ceph-tools -- \
 echo "  [OK] RGW ユーザーが作成されました"
 echo "    Access Key : ceph-obs-access"
 echo "    Secret Key : ceph-obs-secret"
-echo "    Endpoint   : http://rook-ceph-rgw-my-store.rook-ceph.svc"
+echo "    Endpoint   : http://rook-ceph-rgw-my-store.storage.svc"
 
 echo ""
 echo "======================================================"
@@ -94,9 +94,9 @@ echo "  helm upgrade mimir grafana/mimir-distributed -n observability -f k8s/obs
 echo "  helm upgrade tempo grafana/tempo-distributed -n observability -f k8s/observability/08-tempo/values.yaml"
 echo ""
 echo "検証コマンド:"
-echo "  kubectl -n rook-ceph get cephcluster"
-echo "  kubectl -n rook-ceph get cephobjectstore"
-echo "  kubectl -n rook-ceph get pods"
+echo "  kubectl -n storage get cephcluster"
+echo "  kubectl -n storage get cephobjectstore"
+echo "  kubectl -n storage get pods"
 echo "  kubectl get storageclass ceph-block"
 echo ""
 echo "OSD デバイス名の確認（適用前に実施）:"

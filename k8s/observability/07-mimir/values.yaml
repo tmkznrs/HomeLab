@@ -4,7 +4,7 @@ mimir:
       storage:
         backend: s3
         s3:
-          endpoint: rook-ceph-rgw-my-store.rook-ceph.svc
+          endpoint: rook-ceph-rgw-my-store.storage.svc
           access_key_id: ceph-obs-access
           secret_access_key: ceph-obs-secret
           insecure: true

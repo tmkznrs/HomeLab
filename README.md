@@ -256,7 +256,7 @@ helm repo update
 #### Rook Operator をインストール
 ```bash
 helm upgrade --install rook-ceph rook-release/rook-ceph \
-  -n rook-ceph --create-namespace \
+  -n storage --create-namespace \
   -f "$REPO_ROOT/k8s/storage/rook-ceph/operator-values.yaml" \
   --wait
 ```
@@ -264,10 +264,10 @@ helm upgrade --install rook-ceph rook-release/rook-ceph \
 #### CephCluster / CephBlockPool / StorageClass を適用
 ```bash
 kubectl apply -f "$REPO_ROOT/k8s/storage/rook-ceph/cluster.yaml"
-kubectl -n rook-ceph wait cephcluster rook-ceph \
+kubectl -n storage wait cephcluster rook-ceph \
   --for=condition=Ready \
   --timeout=900s
-kubectl -n rook-ceph wait cephobjectstore my-store \
+kubectl -n storage wait cephobjectstore my-store \
   --for=condition=Ready \
   --timeout=600s
 ```
@@ -275,16 +275,16 @@ kubectl -n rook-ceph wait cephobjectstore my-store \
 #### Toolbox のデプロイ + RGW ユーザーを作成（固定クレデンシャル）
 ```bash
 helm template rook-ceph-cluster rook-release/rook-ceph-cluster \
-  -n rook-ceph \
-  --set operatorNamespace=rook-ceph \
+  -n storage \
+  --set operatorNamespace=storage \
   --set clusterName=rook-ceph \
   --set toolbox.enabled=true \
   -s templates/deployment.yaml \
   | kubectl apply -f -
 
-kubectl -n rook-ceph rollout status deploy/rook-ceph-tools --timeout=120s
+kubectl -n storage rollout status deploy/rook-ceph-tools --timeout=120s
 
-kubectl -n rook-ceph exec deploy/rook-ceph-tools -- \
+kubectl -n storage exec deploy/rook-ceph-tools -- \
   radosgw-admin user create \
   --uid=observability \
   --display-name="Observability Stack" \
@@ -293,7 +293,7 @@ kubectl -n rook-ceph exec deploy/rook-ceph-tools -- \
   --rgw-realm=my-store \
   --rgw-zonegroup=my-store \
   --rgw-zone=my-store 2>/dev/null \
-  || kubectl -n rook-ceph exec deploy/rook-ceph-tools -- \
+  || kubectl -n storage exec deploy/rook-ceph-tools -- \
      radosgw-admin user modify \
      --uid=observability \
      --access-key=ceph-obs-access \
@@ -303,10 +303,10 @@ kubectl -n rook-ceph exec deploy/rook-ceph-tools -- \
      --rgw-zone=my-store
 
 # S3 バケットを作成（Loki/Mimir/Tempo 用）
-kubectl -n rook-ceph exec deploy/rook-ceph-tools -- python3 -c "
+kubectl -n storage exec deploy/rook-ceph-tools -- python3 -c "
 import urllib.request, urllib.error, hmac, hashlib, datetime
 
-endpoint = 'http://rook-ceph-rgw-my-store.rook-ceph.svc'
+endpoint = 'http://rook-ceph-rgw-my-store.storage.svc'
 access_key = 'ceph-obs-access'
 secret_key = 'ceph-obs-secret'
 
@@ -328,7 +328,7 @@ region, service = 'us-east-1', 's3'
 
 for bucket in buckets:
     payload_hash = hashlib.sha256(b'').hexdigest()
-    canonical_headers = f'host:rook-ceph-rgw-my-store.rook-ceph.svc\nx-amz-content-sha256:{payload_hash}\nx-amz-date:{amz_date}\n'
+    canonical_headers = f'host:rook-ceph-rgw-my-store.storage.svc\nx-amz-content-sha256:{payload_hash}\nx-amz-date:{amz_date}\n'
     signed_headers = 'host;x-amz-content-sha256;x-amz-date'
     canonical_request = f'PUT\n/{bucket}\n\n{canonical_headers}\n{signed_headers}\n{payload_hash}'
     credential_scope = f'{date_stamp}/{region}/{service}/aws4_request'
