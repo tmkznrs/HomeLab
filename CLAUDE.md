@@ -54,11 +54,11 @@ LAN → host iptables DNAT → 10.10.0.100 (MetalLB) → ingress-nginx → Servi
 - All external traffic enters via **ingress-nginx** at `10.10.0.100` (MetalLB `LoadBalancer` IP).
 - All services are exposed under a single hostname `homelab.local` using path-based routing.
 - TLS is terminated at ingress using the cert-manager-issued secret `homelab-tls` (`homelab-ca-issuer`).
-- `allowSnippetAnnotations: true` and `annotations-risk-level: Critical` are required for MinIO console path rewriting.
+- `allowSnippetAnnotations: true` and `annotations-risk-level: Critical` are enabled.
 
 ### Storage layers
-- **`local-path`** (StorageClass): used for stateful PVCs (Loki write/backend, Mimir ingester/store-gateway/compactor, Tempo ingester). Not the default StorageClass — must be specified explicitly.
-- **MinIO** (`minio-operator` + tenant `minio-observability`): S3-compatible object store for long-term data. Internal endpoint: `minio.storage.svc`. Buckets: `loki-chunks`, `loki-ruler`, `loki-admin`, `mimir-blocks`, `mimir-ruler`, `mimir-alertmanager`, `tempo-traces`. Credentials: `minio` / `minio12345`.
+- **`ceph-block`** (StorageClass): Rook-Ceph RBD、stateful PVCに使用（Loki write/backend、Mimir ingester/store-gateway/compactor、Tempo ingester）。
+- **Rook-Ceph RGW** (`storage` namespace): S3互換オブジェクトストレージ。内部エンドポイント: `rook-ceph-rgw-my-store.storage.svc`。バケット: `loki-chunks`, `loki-ruler`, `loki-admin`, `mimir-blocks`, `mimir-ruler`, `mimir-alertmanager`, `tempo-traces`。認証情報: `ceph-obs-access` / `ceph-obs-secret`。
 
 ### Observability stack data flow
 ```
@@ -68,7 +68,7 @@ Alloy (DaemonSet, all nodes incl. control-plane)
   ├── all pod logs → Loki
   └── OTLP traces (gRPC :4317, HTTP :4318) → Tempo
 ```
-- **Mimir**: distributed mode (replication factor 2), S3 backend via MinIO, `out_of_order_time_window: 10m`.
+- **Mimir**: distributed mode (replication factor 2), S3 backend via Rook-Ceph RGW, `out_of_order_time_window: 10m`.
 - **Loki**: SimpleScalable mode (write/read/backend ×2), S3 backend, retention 168h.
 - **Tempo**: distributed mode (replication factor 2), S3 backend, block retention 168h.
 - **Grafana**: managed by Grafana Operator; PostgreSQL (CloudNativePG cluster `postgres-cluster` in `database` namespace, service `postgres-cluster-rw.database.svc:5432`) as DB backend. Datasources and dashboards are provisioned via `GrafanaDataSource`/`GrafanaDashboard` CRDs.
@@ -109,13 +109,13 @@ kubectl logs <pod> -n <ns> --previous
 ```
 k8s/
   namespaces/          # Namespace definitions (infra, observability, operations)
-  infra/               # cert-manager, ingress-nginx, metallb, authentik
+  infra/               # cert-manager, trust-manager, ingress-nginx, metallb, authentik
   kube-system/         # cilium, metrics-server
-  storage/             # local-path-provisioner, minio (operator + tenant)
+  storage/             # rook-ceph (operator + cluster + RGW)
   database/            # postgres (CloudNativePG), pgadmin
   observability/       # numbered 04–10: grafana-operator, grafana, loki,
                        #   mimir, tempo, alloy, alloy-probe, kube-state-metrics
-  operations/          # headlamp
+  operations/          # headlamp, argocd
 alloy/                 # 外部マシン向け Alloy 設定（Windows など）
 lxd/                   # LXD preseed (init.yaml) and k8s node profile (profile.yaml)
 scripts/               # Numbered bootstrap scripts (00–10) for initial cluster setup
