@@ -37,6 +37,6 @@ devices:
     type: unix-char
   root:
     path: /
-    pool: default
+    pool: fast
     size: 50GiB
     type: disk
