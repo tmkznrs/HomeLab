@@ -35,8 +35,8 @@ declare -A NODE_DISK=(
 # vCPU数（全ノード共通）
 VCPU=2
 
-# Ceph OSD ディスクサイズ（ワーカーVM 1台あたり、3台で計720GiB）
-OSD_DISK_SIZE="240GiB"
+# Ceph OSD ディスクサイズ（ワーカーVM 1台あたり、3台で計600GiB）
+OSD_DISK_SIZE="200GiB"
 
 # ノードルートディスク用 LXD ストレージプール（nvme0n1p4 上の LVM thin プール）
 FAST_POOL="fast"
