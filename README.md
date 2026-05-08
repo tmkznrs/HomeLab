@@ -373,13 +373,16 @@ kubectl -n database exec postgres-cluster-1 -- psql -U postgres -c "CREATE DATAB
 cert-manager・PostgreSQL インストール後に実行すること。
 Authentik の DB は既存の `postgres-cluster`（database namespace）を流用する。
 
+`k8s/infra/authentik/values.yaml` に `bootstrap_password` / `bootstrap_token` を設定することで、
+管理者パスワードと API トークンが自動的に作成される（UI での初回セットアップ不要）。
+
 ```bash
 # Authentik 用 DB・ユーザーを既存 postgres-cluster に作成
 PRIMARY=$(kubectl get cluster postgres-cluster -n database -o jsonpath='{.status.currentPrimary}')
 kubectl exec -n database $PRIMARY -- psql -U postgres -c "CREATE USER authentik WITH PASSWORD 'authentik12345';"
 kubectl exec -n database $PRIMARY -- psql -U postgres -c "CREATE DATABASE authentik OWNER authentik;"
 
-# Authentik インストール
+# Authentik インストール（values.yaml に bootstrap_password/bootstrap_token を含む）
 helm repo add authentik https://charts.goauthentik.io
 helm repo update
 helm upgrade --install authentik authentik/authentik \
@@ -389,6 +392,73 @@ helm upgrade --install authentik authentik/authentik \
 
 kubectl apply -f k8s/infra/authentik/ingress.yaml
 ```
+
+#### OIDC Provider / Application のセットアップ（API 自動化）
+
+bootstrap_token を使って Authentik REST API で全サービスの Provider と Application を一括作成する。
+`k8s/infra/authentik/values.yaml` の `bootstrap_token` の値を TOKEN に設定すること。
+
+```bash
+TOKEN="homelab-bootstrap-token"   # values.yaml の bootstrap_token と一致させる
+API="http://localhost:9000/authentik/api/v3"
+
+# Authentik API に port-forward でアクセス
+kubectl port-forward -n infra svc/authentik-server 9000:80 &
+
+# Authorization Flow / Invalidation Flow の PK を取得
+AUTH_FLOW=$(curl -s "$API/flows/instances/?slug=default-provider-authorization-implicit-consent" \
+  -H "Authorization: Bearer $TOKEN" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['pk'])")
+INVAL_FLOW=$(curl -s "$API/flows/instances/?slug=default-provider-invalidation-flow" \
+  -H "Authorization: Bearer $TOKEN" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['pk'])")
+
+# "authentik Admins" グループを作成
+curl -s -X POST "$API/core/groups/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"authentik Admins","is_superuser":false}' | python3 -c "import sys,json; d=json.load(sys.stdin); print('Group:', d.get('pk', d))"
+
+# OAuth2 Provider 作成関数
+create_provider() {
+  local name=$1 redirect_uri=$2
+  curl -s -X POST "$API/providers/oauth2/" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"name\":\"$name\",\"authorization_flow\":\"$AUTH_FLOW\",\"invalidation_flow\":\"$INVAL_FLOW\",
+         \"redirect_uris\":[{\"matching_mode\":\"strict\",\"url\":\"$redirect_uri\"}],
+         \"sub_mode\":\"hashed_user_id\",\"include_claims_in_id_token\":true}"
+}
+
+# 各サービスの Provider を作成し、client_id / client_secret を取得して各ファイルに記入
+GRAFANA=$(create_provider "grafana" "https://homelab.local/grafana/login/generic_oauth")
+HEADLAMP=$(create_provider "headlamp" "https://homelab.local/headlamp/oidc-callback")
+ARGOCD=$(create_provider "argocd" "https://homelab.local/argocd/auth/callback")
+PGADMIN=$(create_provider "pgadmin" "https://homelab.local/pgadmin/oauth2/authorize")
+
+# Application 作成（Provider PK は各レスポンスの .pk を使用）
+create_app() {
+  local name=$1 slug=$2 pk=$3 url=$4
+  curl -s -X POST "$API/core/applications/" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"name\":\"$name\",\"slug\":\"$slug\",\"provider\":$pk,\"meta_launch_url\":\"$url\"}"
+}
+# pk は各 Provider レスポンスの .pk フィールドを参照
+create_app "Grafana"  "grafana"  <grafana_pk>  "https://homelab.local/grafana/"
+create_app "Headlamp" "headlamp" <headlamp_pk> "https://homelab.local/headlamp/"
+create_app "ArgoCD"   "argocd"   <argocd_pk>   "https://homelab.local/argocd/"
+create_app "pgAdmin"  "pgadmin"  <pgadmin_pk>  "https://homelab.local/pgadmin/"
+```
+
+Provider 作成後、取得した client_id / client_secret を以下に反映する:
+
+| サービス | 更新先 |
+|---------|-------|
+| Grafana | `kubectl create secret generic grafana-oauth-secret -n observability --from-literal=GF_AUTH_GENERIC_OAUTH_CLIENT_ID=<id> --from-literal=GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET=<secret>` |
+| Headlamp | `k8s/operations/headlamp/values.yaml` の `config.oidc.clientID` / `clientSecret` |
+| ArgoCD | `k8s/operations/argocd/values.yaml` の `clientID`、`k8s/operations/argocd/oidc-secret.yaml` の `clientSecret` |
+| pgAdmin | `k8s/database/pgadmin/oauth2-secret.yaml` の `OAUTH2_CLIENT_ID` / `OAUTH2_CLIENT_SECRET` |
 
 ### pgAdmin
 

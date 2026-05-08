@@ -7,7 +7,7 @@ configs:
     oidc.config: |
       name: Authentik
       issuer: https://homelab.local/authentik/application/o/argocd/
-      clientID: "7XAD4sA1y7xkbQZGywFzMZFeT4gkd7p7pWLX4aZ1"
+      clientID: "<ARGOCD_CLIENT_ID>"
       clientSecret: $argocd-oidc-secret:clientSecret
       requestedScopes:
         - openid

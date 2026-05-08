@@ -1,10 +1,12 @@
 authentik:
-  secret_key: "5260f5c91dd3fb23b144244167b8095f825f34e2820070c537abd79abbdbde9d7be42472e4494b5f4d8e3d1f67a1b3d3c3d1"
+  secret_key: "<AUTHENTIK_SECRET_KEY>"
+  bootstrap_password: "<BOOTSTRAP_PASSWORD>"
+  bootstrap_token: "<BOOTSTRAP_TOKEN>"
   postgresql:
     host: "postgres-cluster-rw.database.svc"
     name: authentik
     user: authentik
-    password: authentik12345
+    password: "<AUTHENTIK_DB_PASSWORD>"
   redis:
     host: "{{ .Release.Name }}-redis-master"
 
