@@ -153,3 +153,15 @@ data:
           meta_launch_url: "https://homelab.local/hubble/"
           meta_icon: "https://cilium.io/static/hubble-light-1-812e65cbb72a7f4efed59fcea48df840.svg"
           open_in_new_tab: true
+
+      # === Ceph ===
+      - model: authentik_core.application
+        state: present
+        identifiers:
+          slug: "ceph"
+        attrs:
+          name: "Ceph"
+          slug: "ceph"
+          meta_launch_url: "https://homelab.local/ceph/"
+          meta_icon: "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/ceph.svg"
+          open_in_new_tab: true
