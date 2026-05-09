@@ -41,6 +41,10 @@ worker:
     limits:
       memory: 1Gi
 
+blueprints:
+  configMaps:
+    - authentik-blueprints
+
 postgresql:
   enabled: false
 

@@ -54,6 +54,7 @@ ingester:
   replicas: 2
   persistentVolume:
     storageClass: ceph-block
+    size: 10Gi
   zoneAwareReplication:
     enabled: false
     migration:

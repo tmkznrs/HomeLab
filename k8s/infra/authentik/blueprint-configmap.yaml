@@ -1,0 +1,155 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authentik-blueprints
+  namespace: infra
+data:
+  homelab-oidc.yaml: |
+    version: 1
+    metadata:
+      name: "homelab-oidc-setup"
+    entries:
+      # === Grafana ===
+      - model: authentik_providers_oauth2.oauth2provider
+        state: present
+        identifiers:
+          name: "grafana"
+        attrs:
+          name: "grafana"
+          authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+          client_id: "9GflpOYBrRTsMdJULeNmAPIK0D4nhq4lVZgZeme3"
+          client_secret: "og34Rsu7WufOySSMG5BXp6Eo8ZjPioCT2TB8x7bS72urGrQ23wPZAWnKjv4oFTtjSVLbHRw88JeSzSvjHuQN8v9PDaJPDP4EzkJPrePcZDVSrAJh3wS2fS5R9zOjsn4E"
+          redirect_uris:
+            - matching_mode: strict
+              url: "https://homelab.local/grafana/login/generic_oauth"
+          sub_mode: hashed_user_id
+          include_claims_in_id_token: true
+          property_mappings:
+            - !Find [authentik_providers_oauth2.scopemapping, [scope_name, openid]]
+            - !Find [authentik_providers_oauth2.scopemapping, [scope_name, profile]]
+            - !Find [authentik_providers_oauth2.scopemapping, [scope_name, email]]
+    
+      - model: authentik_core.application
+        state: present
+        identifiers:
+          slug: "grafana"
+        attrs:
+          name: "Grafana"
+          slug: "grafana"
+          provider: !Find [authentik_providers_oauth2.oauth2provider, [name, grafana]]
+          meta_launch_url: "https://homelab.local/grafana/"
+          meta_icon: "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/grafana.svg"
+          open_in_new_tab: true
+
+      # === Headlamp ===
+      - model: authentik_providers_oauth2.oauth2provider
+        state: present
+        identifiers:
+          name: "headlamp"
+        attrs:
+          name: "headlamp"
+          authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+          client_id: "edWXswNHdvZ3ivhXdGtzLYzM9ujmDWqD4ZEn6tbb"
+          client_secret: "ZCz6wEERsbVbVTowjNcxYjDbQSaxoPMuHiTos6pIGQuUCxNYDMsnjCbrVX6RgBeMZkaXYQzqAHrN9VBc04kKO6QM7xnprUQrZregxfcsW2YTKupGbhF7GiXDzKKK7C6P"
+          redirect_uris:
+            - matching_mode: strict
+              url: "https://homelab.local/headlamp/oidc-callback"
+          sub_mode: hashed_user_id
+          include_claims_in_id_token: true
+          access_token_validity: "days=1"
+          property_mappings:
+            - !Find [authentik_providers_oauth2.scopemapping, [scope_name, openid]]
+            - !Find [authentik_providers_oauth2.scopemapping, [scope_name, profile]]
+            - !Find [authentik_providers_oauth2.scopemapping, [scope_name, email]]
+
+      - model: authentik_core.application
+        state: present
+        identifiers:
+          slug: "headlamp"
+        attrs:
+          name: "Headlamp"
+          slug: "headlamp"
+          provider: !Find [authentik_providers_oauth2.oauth2provider, [name, headlamp]]
+          meta_launch_url: "https://homelab.local/headlamp/"
+          meta_icon: "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/headlamp.svg"
+          open_in_new_tab: true
+
+      # === ArgoCD ===
+      - model: authentik_providers_oauth2.oauth2provider
+        state: present
+        identifiers:
+          name: "argocd"
+        attrs:
+          name: "argocd"
+          authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+          client_id: "G1CyWZGRrewnzd0iFx3PO8xclNaDwqDnpr99u2a5"
+          client_secret: "5XuXPFhvVjX6tPOaH2zp9oHMrkfqdA590wf8M4wDWRFAnaeKo0kKLSLRyHu9bhRL3SwF2CrQDTr6aICkGPWXWtDjAWZ7z3f3Nf1eyeEgdDeYaWkous6tOPfWLLWFEpKw"
+          redirect_uris:
+            - matching_mode: strict
+              url: "https://homelab.local/argocd/auth/callback"
+          sub_mode: hashed_user_id
+          include_claims_in_id_token: true
+          property_mappings:
+            - !Find [authentik_providers_oauth2.scopemapping, [scope_name, openid]]
+            - !Find [authentik_providers_oauth2.scopemapping, [scope_name, profile]]
+            - !Find [authentik_providers_oauth2.scopemapping, [scope_name, email]]
+    
+      - model: authentik_core.application
+        state: present
+        identifiers:
+          slug: "argocd"
+        attrs:
+          name: "ArgoCD"
+          slug: "argocd"
+          provider: !Find [authentik_providers_oauth2.oauth2provider, [name, argocd]]
+          meta_launch_url: "https://homelab.local/argocd/"
+          meta_icon: "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/argo-cd.svg"
+          open_in_new_tab: true
+
+      # === pgAdmin ===
+      - model: authentik_providers_oauth2.oauth2provider
+        state: present
+        identifiers:
+          name: "pgadmin"
+        attrs:
+          name: "pgadmin"
+          authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+          client_id: "C3CBTOWo9fNWNrgbfdOwM7rrlKGl1vkrcsgtNEpf"
+          client_secret: "hohCXv32qGPhXp943sWQAW9dWl7YodLqXc82wIRA7SgRSTtvOPrKienXughIlmb7s4sVfwAtouHABjAyJqoYa1fEFPMGoPtio6uiTZA3UDkkhhK7PTR9sc1YQe3PExkx"
+          redirect_uris:
+            - matching_mode: strict
+              url: "https://homelab.local/pgadmin/oauth2/authorize"
+          sub_mode: hashed_user_id
+          include_claims_in_id_token: true
+          property_mappings:
+            - !Find [authentik_providers_oauth2.scopemapping, [scope_name, openid]]
+            - !Find [authentik_providers_oauth2.scopemapping, [scope_name, profile]]
+            - !Find [authentik_providers_oauth2.scopemapping, [scope_name, email]]
+    
+      - model: authentik_core.application
+        state: present
+        identifiers:
+          slug: "pgadmin"
+        attrs:
+          name: "pgAdmin"
+          slug: "pgadmin"
+          provider: !Find [authentik_providers_oauth2.oauth2provider, [name, pgadmin]]
+          meta_launch_url: "https://homelab.local/pgadmin/"
+          meta_icon: "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/pgadmin.svg"
+          open_in_new_tab: true
+
+      # === Hubble ===
+      - model: authentik_core.application
+        state: present
+        identifiers:
+          slug: "hubble"
+        attrs:
+          name: "Hubble"
+          slug: "hubble"
+          meta_launch_url: "https://homelab.local/hubble/"
+          meta_icon: "https://cilium.io/static/hubble-light-1-812e65cbb72a7f4efed59fcea48df840.svg"
+          open_in_new_tab: true

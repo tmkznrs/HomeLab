@@ -1,8 +1,8 @@
 config:
   baseURL: /headlamp
   oidc:
-    clientID: "<HEADLAMP_CLIENT_ID>"
-    clientSecret: "<HEADLAMP_CLIENT_SECRET>"
+    clientID: "edWXswNHdvZ3ivhXdGtzLYzM9ujmDWqD4ZEn6tbb"
+    clientSecret: "ZCz6wEERsbVbVTowjNcxYjDbQSaxoPMuHiTos6pIGQuUCxNYDMsnjCbrVX6RgBeMZkaXYQzqAHrN9VBc04kKO6QM7xnprUQrZregxfcsW2YTKupGbhF7GiXDzKKK7C6P"
     issuerURL: "https://homelab.local/authentik/application/o/headlamp/"
     scopes: "openid profile email offline_access"
   extraArgs:
