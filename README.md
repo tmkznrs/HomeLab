@@ -356,6 +356,20 @@ for bucket in buckets:
 "
 ```
 
+#### Ceph ダッシュボード Ingress を適用
+
+```bash
+kubectl apply -f k8s/storage/rook-ceph/ingress.yaml
+```
+
+ダッシュボードのパスワードを確認：
+
+```bash
+kubectl get secret -n storage rook-ceph-dashboard-password -o jsonpath='{.data.password}' | base64 -d
+```
+
+ユーザー名は `admin`、パスワードは上記コマンドで確認した値。
+
 ### PostgreSQL (CloudNativePG)
 
 Grafana・Authentik のバックエンド DB。
