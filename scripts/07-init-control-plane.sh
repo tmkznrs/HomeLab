@@ -72,6 +72,13 @@ apiServer:
       value: "150"
     - name: max-mutating-requests-inflight
       value: "50"
+etcd:
+  local:
+    extraArgs:
+      - name: heartbeat-interval
+        value: "500"
+      - name: election-timeout
+        value: "2500"
 EOF
 
 lxc exec "$FIRST_CP" -- kubeadm init \

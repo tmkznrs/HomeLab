@@ -38,7 +38,10 @@ VCPU=2
 # Ceph OSD ディスクサイズ（ワーカーVM 1台あたり、3台で計600GiB）
 OSD_DISK_SIZE="200GiB"
 
-# Ceph OSD 用 LXD ストレージプール（nvme0n1p4 上の LVM プール）
+# ノードルートディスク用 LXD ストレージプール（nvme0n1p4 上の LVM thin プール）
+FAST_POOL="fast"
+
+# Ceph OSD 用 LXD ストレージプール（nvme0n1p5 上の LVM thick プール）
 OSD_POOL="osd"
 
 # 起動順序（コントロールプレーン → ワーカー）

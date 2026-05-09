@@ -279,8 +279,17 @@ helm template rook-ceph-cluster rook-release/rook-ceph-cluster \
   --set operatorNamespace=storage \
   --set clusterName=rook-ceph \
   --set toolbox.enabled=true \
-  -s templates/deployment.yaml \
-  | kubectl apply -f -
+  | python3 -c "
+import sys
+docs = sys.stdin.read().split('---')
+for doc in docs:
+    if 'rook-ceph-tools' in doc and 'kind: Deployment' in doc:
+        print('---')
+        print(doc)
+" | kubectl apply -n storage -f -
+# 注意: -s templates/deployment.yaml は rook-ceph-cluster chart では使用不可。
+#       Deployment だけを python3 で抽出して apply する。
+#       必ず -n storage を指定すること（省略すると default namespace に作成される）。
 
 kubectl -n storage rollout status deploy/rook-ceph-tools --timeout=120s
 
@@ -347,6 +356,20 @@ for bucket in buckets:
 "
 ```
 
+#### Ceph ダッシュボード Ingress を適用
+
+```bash
+kubectl apply -f k8s/storage/rook-ceph/ingress.yaml
+```
+
+ダッシュボードのパスワードを確認：
+
+```bash
+kubectl get secret -n storage rook-ceph-dashboard-password -o jsonpath='{.data.password}' | base64 -d
+```
+
+ユーザー名は `admin`、パスワードは上記コマンドで確認した値。
+
 ### PostgreSQL (CloudNativePG)
 
 Grafana・Authentik のバックエンド DB。
@@ -373,13 +396,16 @@ kubectl -n database exec postgres-cluster-1 -- psql -U postgres -c "CREATE DATAB
 cert-manager・PostgreSQL インストール後に実行すること。
 Authentik の DB は既存の `postgres-cluster`（database namespace）を流用する。
 
+`k8s/infra/authentik/values.yaml` に `bootstrap_password` / `bootstrap_token` を設定することで、
+管理者パスワードと API トークンが自動的に作成される（UI での初回セットアップ不要）。
+
 ```bash
 # Authentik 用 DB・ユーザーを既存 postgres-cluster に作成
 PRIMARY=$(kubectl get cluster postgres-cluster -n database -o jsonpath='{.status.currentPrimary}')
 kubectl exec -n database $PRIMARY -- psql -U postgres -c "CREATE USER authentik WITH PASSWORD 'authentik12345';"
 kubectl exec -n database $PRIMARY -- psql -U postgres -c "CREATE DATABASE authentik OWNER authentik;"
 
-# Authentik インストール
+# Authentik インストール（values.yaml に bootstrap_password/bootstrap_token を含む）
 helm repo add authentik https://charts.goauthentik.io
 helm repo update
 helm upgrade --install authentik authentik/authentik \
@@ -389,6 +415,26 @@ helm upgrade --install authentik authentik/authentik \
 
 kubectl apply -f k8s/infra/authentik/ingress.yaml
 ```
+
+#### OIDC Provider / Application のセットアップ（Blueprint）
+
+全サービスの OAuth2 Provider と Application は Authentik Blueprint で宣言的に管理する。
+`k8s/infra/authentik/blueprint-configmap.yaml` に client_id / client_secret が固定値で記述されており、
+Authentik に自動適用される。
+
+```bash
+# Blueprint ConfigMap を apply（Authentik が自動的に読み込む）
+kubectl apply -f k8s/infra/authentik/blueprint-configmap.yaml
+```
+
+Blueprint 適用後、取得した client_id / client_secret を以下に反映する:
+
+| サービス | 更新先 |
+|---------|-------|
+| Grafana | `k8s/observability/05-grafana/oauth2-secret.yaml` の client_id / client_secret |
+| Headlamp | `k8s/operations/headlamp/values.yaml` の `config.oidc.clientID` / `clientSecret` |
+| ArgoCD | `k8s/operations/argocd/values.yaml` の `clientID`、`k8s/operations/argocd/oidc-secret.yaml` の `clientSecret` |
+| pgAdmin | `k8s/database/pgadmin/oauth2-secret.yaml` の `OAUTH2_CLIENT_ID` / `OAUTH2_CLIENT_SECRET` |
 
 ### pgAdmin
 
@@ -417,35 +463,27 @@ Authentik OIDC 認証を使用する。事前に Authentik のセットアップ
 > **既知の制限**: Headlamp は OIDC アクセストークンをプロアクティブにリフレッシュしない。
 > セッション継続時間は Authentik の `access_token_validity` と一致する（詳細: `docs/troubleshooting/headlamp-oidc-session.md`）。
 
-#### Authentik アプリ作成（UI）
-
-1. Admin → Applications → Providers → OAuth2/OIDC Provider を作成
-   - Name: `headlamp` / Client type: `Confidential`
-   - Redirect URIs: `https://homelab.local/headlamp/oidc-callback`
-2. Admin → Applications → Application を作成
-   - Slug: `headlamp`、上記 Provider を紐付け
-   - Launch URL: `https://homelab.local/headlamp/`
-3. クライアント ID・シークレットを `k8s/operations/headlamp/values.yaml` の `config.oidc` に記入
+Headlamp の Provider / Application は Blueprint で自動作成される（`k8s/infra/authentik/blueprint-configmap.yaml`）。
+クライアント ID・シークレットは `k8s/operations/headlamp/values.yaml` の `config.oidc` に記入されている。
 
 #### CP ノードの準備
 
 kube-apiserver が OIDC issuer URL（`https://homelab.local/...`）を検証するため、各 CP ノードに設定が必要。
 
 ```bash
-# homelab.local の名前解決（LXD コンテナ再起動後も永続）
-for node in k8s-cp-1 k8s-cp-2 k8s-cp-3; do
-  lxc exec $node -- bash -c 'grep -q homelab.local /etc/hosts || echo "10.10.0.100 homelab.local" >> /etc/hosts'
-done
-
 # CA 証明書を配布（kube-apiserver が Authentik の TLS を検証するために必要）
 for node in k8s-cp-1 k8s-cp-2 k8s-cp-3; do
   lxc file push homelab-ca.crt ${node}/etc/kubernetes/pki/homelab-ca.crt
 done
 
-# kube-apiserver に OIDC フラグを追加（各 CP ノードの manifest を編集）
+# kube-apiserver に OIDC フラグと hostAliases を追加（各 CP ノードの manifest を編集）
 # <CLIENT_ID>を実際のクライアントIDに書き換えて実行すること
+# 注意: /etc/hosts への追記では kube-apiserver には効かない（v1.35 以降、静的 Pod は
+#       kubelet 管理の独立した /etc/hosts を使うため）。hostAliases が正しい方法。
 for node in k8s-cp-1 k8s-cp-2 k8s-cp-3; do
   lxc exec $node -- sed -i '/--tls-cert-file/a\    - --oidc-issuer-url=https://homelab.local/authentik/application/o/headlamp/\n    - --oidc-client-id=<CLIENT_ID>\n    - --oidc-username-claim=preferred_username\n    - --oidc-groups-claim=groups\n    - --oidc-ca-file=/etc/kubernetes/pki/homelab-ca.crt' \
+    /etc/kubernetes/manifests/kube-apiserver.yaml
+  lxc exec $node -- sed -i '/hostNetwork: true/a\  hostAliases:\n  - ip: "10.10.0.100"\n    hostnames:\n    - "homelab.local"' \
     /etc/kubernetes/manifests/kube-apiserver.yaml
 done
 # → kube-apiserver が自動再起動（約 30 秒 × 3 台）
@@ -491,19 +529,11 @@ kubectl apply -f k8s/kube-system/cilium/ingress-hubble.yaml
 
 Authentik のセットアップ完了後に実行すること。
 
-#### Authentik アプリ作成（UI）
-
-1. Admin → Applications → Providers → OAuth2/OIDC Provider を作成
-   - Name: `argocd` / Client type: `Confidential`
-   - Redirect URIs: `https://homelab.local/argocd/auth/callback`
-   - Scopes: `authentik default OAuth Mapping - OpenID 'groups'` を追加
-2. Admin → Applications → Application を作成
-   - Slug: `argocd`、上記 Provider を紐付け
-3. クライアント ID・シークレットを控える
+ArgoCD の Provider / Application は Blueprint で自動作成される（`k8s/infra/authentik/blueprint-configmap.yaml`）。
 
 #### インストール
 
-クライアントシークレットを `k8s/operations/argocd/oidc-secret.yaml` に記入し、クライアント ID を `k8s/operations/argocd/values.yaml` の `configs.cm.oidc.config.clientID` に記入してから実行する。
+クライアントシークレットを `k8s/operations/argocd/oidc-secret.yaml` に、クライアント ID を `k8s/operations/argocd/values.yaml` の `configs.cm.oidc.config.clientID` に記入してから実行する。
 
 ```bash
 helm repo add argo https://argoproj.github.io/argo-helm
@@ -536,18 +566,9 @@ argocd login homelab.local \
 
 
 
-初回セットアップ（UI）：
+初回セットアップ：
 1. `https://homelab.local/authentik/if/flow/initial-setup/` にアクセスして管理者パスワードを設定
-2. Admin → Applications → Providers → OAuth2/OIDC Provider を作成
-   - Name: `grafana` / Redirect URIs: `https://homelab.local/grafana/login/generic_oauth`
-3. Admin → Applications → Application を作成
-   - Slug: `grafana`、上記 Provider を紐付け
-   - Launch URL: `https://homelab.local/grafana/`
-4. クライアント ID・シークレットを `k8s/infra/authentik/grafana-oauth-secret.yaml` に記入して apply
-
-```bash
-kubectl apply -f k8s/infra/authentik/grafana-oauth-secret.yaml
-```
+2. Provider / Application は Blueprint が自動適用する（`k8s/infra/authentik/blueprint-configmap.yaml`）
 
 ---
 ## Observability スタックのインストール
@@ -563,25 +584,22 @@ helm repo update
 
 ### Grafana Operator + Grafana
 
-#### Authentik アプリ作成（UI）
-
-https://homelab.local/authentik/ にアクセスして以下を実施：
-
-1. Admin → Applications → Providers → Create → OAuth2/OIDC Provider
-Name: grafana
-Client type: Confidential
-Redirect URIs: https://homelab.local/grafana/login/generic_oauth
-2. Admin → Applications → Applications → Create
-Slug: grafana
-上記 Provider を紐付け
-Launch URL: https://homelab.local/grafana/
-3. 作成した Provider のクライアント ID・シークレットを
-   k8s/observability/05-grafana/grafana.yamlの
-   `auth.generic_oauth.client_id` / `client_secret` に直接書き込む
-
 #### Grafanaのインストール
 
+Authentik の Provider / Application は Blueprint で自動作成される（前述）。
+Grafana の OAuth2 認証情報は Secret 経由で渡す。
+
 ```bash
+# CA 証明書 ConfigMap を observability namespace にも作成
+kubectl get secret homelab-ca-secret -n infra \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/homelab-ca.crt
+kubectl create configmap homelab-ca \
+  --from-file=ca.crt=/tmp/homelab-ca.crt \
+  -n observability --dry-run=client -o yaml | kubectl apply -f -
+
+# OAuth2 Secret を apply（client_id / client_secret は blueprint-configmap.yaml と一致させる）
+kubectl apply -f k8s/observability/05-grafana/oauth2-secret.yaml
+
 helm upgrade --install grafana-operator \
   oci://ghcr.io/grafana/helm-charts/grafana-operator \
   --version 5.22.2 \
