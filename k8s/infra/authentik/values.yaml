@@ -6,7 +6,7 @@ authentik:
     host: "postgres-cluster-rw.database.svc"
     name: authentik
     user: authentik
-    password: "<AUTHENTIK_DB_PASSWORD>"
+    password: "authentik12345"
   redis:
     host: "{{ .Release.Name }}-redis-master"
 
@@ -22,10 +22,14 @@ server:
     httpGet:
       path: /authentik/-/health/ready/
       port: http
+    timeoutSeconds: 5
+    failureThreshold: 5
   livenessProbe:
     httpGet:
       path: /authentik/-/health/live/
       port: http
+    timeoutSeconds: 5
+    failureThreshold: 5
   resources:
     requests:
       cpu: 50m
@@ -34,6 +38,20 @@ server:
       memory: 1Gi
 
 worker:
+  readinessProbe:
+    exec:
+      command: [ak, healthcheck]
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 5
+  livenessProbe:
+    exec:
+      command: [ak, healthcheck]
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 5
   resources:
     requests:
       cpu: 50m

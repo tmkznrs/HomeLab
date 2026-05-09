@@ -1,6 +1,15 @@
 deploymentMode: SimpleScalable
 
 loki:
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: http-metrics
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+    successThreshold: 1
   auth_enabled: false
   structuredConfig:
     ingester:

@@ -29,3 +29,25 @@ spec:
           annotations:
             summary: "Node memory usage critical: {{ $labels.node }}"
             description: "Memory usage is {{ $value | humanize }}% (threshold: 90%)"
+        - alert: NodeCPUHigh
+          expr: |
+            sum(irate(container_cpu_usage_seconds_total{container!=""}[2m])) by (node)
+            / sum(kube_node_status_allocatable{resource="cpu", unit="core"}) by (node)
+            * 100 > 80
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Node CPU usage high: {{ $labels.node }}"
+            description: "CPU usage is {{ $value | humanize }}% (threshold: 80%)"
+        - alert: NodeCPUCritical
+          expr: |
+            sum(irate(container_cpu_usage_seconds_total{container!=""}[2m])) by (node)
+            / sum(kube_node_status_allocatable{resource="cpu", unit="core"}) by (node)
+            * 100 > 90
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Node CPU usage critical: {{ $labels.node }}"
+            description: "CPU usage is {{ $value | humanize }}% (threshold: 90%)"
